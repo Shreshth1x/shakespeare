@@ -1,10 +1,20 @@
 import { app, BrowserWindow, Menu, Notification, Tray, globalShortcut, ipcMain, nativeImage, shell } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { compilePrompt, checkBackend } from "./backendClient";
 import { SettingsStore, toDashboardState } from "./settings";
 import { captureSelectedText, getActiveWindowContext, pasteReplacement } from "./textReplacement";
-import type { AppSettings, CompilePromptRequest } from "../shared/types";
+import { detectTargetTool, isAppDenied } from "../shared/appDetection";
+import type {
+  AppSettings,
+  CompilePromptRequest,
+  CompilePromptResponse,
+  ContextReceipt,
+  HistoryRecord,
+  PendingPreview,
+  PromptContext
+} from "../shared/types";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -13,6 +23,14 @@ let tray: Tray | null = null;
 let store: SettingsStore;
 let backendHealthy = false;
 let registeredHotkey = false;
+let registeredPreviewHotkey = false;
+let pendingPreview:
+  | (PendingPreview & {
+      previousClipboardText: string;
+      restoreClipboard: boolean;
+      request: CompilePromptRequest;
+    })
+  | null = null;
 
 app.whenReady().then(async () => {
   store = new SettingsStore();
@@ -87,20 +105,23 @@ function registerConfiguredHotkey(): void {
   registeredHotkey = globalShortcut.register(store.get().hotkey, () => {
     void rewriteSelection();
   });
+  registeredPreviewHotkey = globalShortcut.register(store.get().previewHotkey, () => {
+    void acceptPreview();
+  });
   pushState();
 }
 
 function registerIpc(): void {
   ipcMain.handle("state:get", async () => {
     backendHealthy = await checkBackend(store.get());
-    return toDashboardState(store.get(), backendHealthy, registeredHotkey);
+    return dashboardState();
   });
 
   ipcMain.handle("settings:update", async (_event, patch: Partial<AppSettings>) => {
     store.update(patch);
     backendHealthy = await checkBackend(store.get());
     registerConfiguredHotkey();
-    return toDashboardState(store.get(), backendHealthy, registeredHotkey);
+    return dashboardState();
   });
 
   ipcMain.handle("backend:check", async () => {
@@ -118,12 +139,17 @@ function registerIpc(): void {
       optimization_mode: settings.optimizationMode,
       context: { active_app: "Shakespeare dashboard", selected_text: roughPrompt }
     });
+    store.setLastReceipt(toReceipt(response));
+    addHistory(roughPrompt, response.optimized_prompt, response, settings);
     store.recordSuccess(Date.now() - startedAt);
     pushState();
     return response;
   });
 
   ipcMain.handle("rewrite:selection", async () => rewriteSelection());
+  ipcMain.handle("preview:accept", async () => acceptPreview());
+  ipcMain.handle("preview:cancel", async () => cancelPreview());
+  ipcMain.handle("preview:regenerate", async () => regeneratePreview());
 
   ipcMain.handle("shell:openExternal", async (_event, url: string) => {
     await shell.openExternal(url);
@@ -141,18 +167,42 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
     }
 
     const windowContext = await getActiveWindowContext();
+    const context = buildContext(windowContext, selection.selectedText, selection.previousClipboardText, settings);
+    if (isAppDenied(context, settings.appDenylist)) {
+      throw new Error("This app or window is on your denylist.");
+    }
+
     const request: CompilePromptRequest = {
       rough_prompt: selection.selectedText,
       mode: settings.promptMode,
       optimization_mode: settings.optimizationMode,
-      context: {
-        ...windowContext,
-        selected_text: selection.selectedText
-      }
+      context
     };
 
     const response = await compilePrompt(settings, request);
+    store.setLastReceipt(toReceipt(response));
+
+    if (settings.previewEnabled) {
+      pendingPreview = {
+        id: randomUUID(),
+        roughPrompt: selection.selectedText,
+        optimizedPrompt: response.optimized_prompt,
+        mode: settings.promptMode,
+        optimizationMode: settings.optimizationMode,
+        context,
+        contextReceipt: toReceipt(response),
+        previousClipboardText: selection.previousClipboardText,
+        restoreClipboard: settings.restoreClipboard,
+        request
+      };
+      mainWindow?.show();
+      notify("Preview ready", "Review the optimized prompt before replacing your selection.");
+      pushState();
+      return { ok: true };
+    }
+
     await pasteReplacement(response.optimized_prompt, selection.previousClipboardText, settings.restoreClipboard);
+    addHistory(selection.selectedText, response.optimized_prompt, response, settings);
     store.recordSuccess(Date.now() - startedAt);
     notify("Prompt rewritten", `${settings.optimizationMode === "speed" ? "Speed" : "Quality"} mode finished.`);
     pushState();
@@ -166,8 +216,142 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
   }
 }
 
+async function acceptPreview(): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!pendingPreview) {
+    return { ok: false, error: "No preview is waiting." };
+  }
+
+  const startedAt = Date.now();
+  const preview = pendingPreview;
+  const settings = store.get();
+
+  try {
+    await pasteReplacement(preview.optimizedPrompt, preview.previousClipboardText, preview.restoreClipboard);
+    addHistory(preview.roughPrompt, preview.optimizedPrompt, preview.contextReceipt, settings);
+    store.recordSuccess(Date.now() - startedAt);
+    pendingPreview = null;
+    notify("Prompt replaced", "Preview accepted.");
+    pushState();
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not accept preview.";
+    store.recordFailure();
+    notify("Preview failed", message);
+    pushState();
+    return { ok: false, error: message };
+  }
+}
+
+async function cancelPreview(): Promise<{ ok: true }> {
+  if (pendingPreview) {
+    store.recordCanceledPreview();
+  }
+  pendingPreview = null;
+  pushState();
+  return { ok: true };
+}
+
+async function regeneratePreview(): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!pendingPreview) {
+    return { ok: false, error: "No preview is waiting." };
+  }
+
+  try {
+    const settings = store.get();
+    const response = await compilePrompt(settings, {
+      ...pendingPreview.request,
+      optimization_mode: settings.optimizationMode,
+      mode: settings.promptMode
+    });
+    pendingPreview = {
+      ...pendingPreview,
+      optimizedPrompt: response.optimized_prompt,
+      mode: settings.promptMode,
+      optimizationMode: settings.optimizationMode,
+      contextReceipt: toReceipt(response)
+    };
+    store.setLastReceipt(toReceipt(response));
+    store.recordRegeneratedPreview();
+    pushState();
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not regenerate preview.";
+    notify("Regenerate failed", message);
+    return { ok: false, error: message };
+  }
+}
+
+function buildContext(
+  windowContext: PromptContext,
+  selectedText: string,
+  previousClipboardText: string,
+  settings: AppSettings
+): PromptContext {
+  const base: PromptContext = {
+    ...windowContext,
+    selected_text: selectedText,
+    clipboard_text: settings.clipboardContextEnabled ? previousClipboardText : null
+  };
+  const detectedTarget = detectTargetTool(base);
+  return {
+    ...base,
+    detected_target: detectedTarget
+  };
+}
+
+function toReceipt(source: CompilePromptResponse | ContextReceipt): ContextReceipt {
+  return {
+    context_used: source.context_used,
+    warnings: source.warnings,
+    model: source.model,
+    latency_ms: source.latency_ms
+  };
+}
+
+function addHistory(
+  roughPrompt: string,
+  optimizedPrompt: string,
+  source: CompilePromptResponse | ContextReceipt,
+  settings: AppSettings
+): HistoryRecord[] {
+  return store.addHistory({
+    id: randomUUID(),
+    createdAt: new Date().toISOString(),
+    mode: settings.promptMode,
+    optimizationMode: settings.optimizationMode,
+    roughPrompt,
+    optimizedPrompt,
+    contextReceipt: toReceipt(source)
+  });
+}
+
 function pushState(): void {
-  mainWindow?.webContents.send("state:changed", toDashboardState(store.get(), backendHealthy, registeredHotkey));
+  mainWindow?.webContents.send("state:changed", dashboardState());
+}
+
+function dashboardState() {
+  return toDashboardState(
+    store.get(),
+    backendHealthy,
+    registeredHotkey,
+    registeredPreviewHotkey,
+    pendingPreview ? stripPendingPreview(pendingPreview) : null,
+    store.historySnapshot(),
+    store.lastReceiptSnapshot()
+  );
+}
+
+function stripPendingPreview(preview: typeof pendingPreview): PendingPreview | null {
+  if (!preview) return null;
+  return {
+    id: preview.id,
+    roughPrompt: preview.roughPrompt,
+    optimizedPrompt: preview.optimizedPrompt,
+    mode: preview.mode,
+    optimizationMode: preview.optimizationMode,
+    context: preview.context,
+    contextReceipt: preview.contextReceipt
+  };
 }
 
 function notify(title: string, body: string): void {

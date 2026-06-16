@@ -98,6 +98,7 @@ export function compilePromptLocally(request: CompilePromptRequest): string {
   const visibleBits = [
     context.active_app ? `Active app: ${context.active_app}.` : null,
     context.window_title ? `Window: ${context.window_title}.` : null,
+    context.detected_target ? `Detected target: ${context.detected_target}.` : null,
     context.visible_text ? `Observed context: ${context.visible_text}` : null
   ].filter(Boolean);
 

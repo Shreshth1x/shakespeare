@@ -1,31 +1,51 @@
 import { app } from "electron";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { AppSettings, DashboardState } from "../shared/types";
+import type { AppSettings, ContextReceipt, DashboardState, HistoryRecord, PendingPreview } from "../shared/types";
 
 const DEFAULT_SETTINGS: AppSettings = {
   hotkey: "CommandOrControl+Shift+P",
+  previewHotkey: "CommandOrControl+Shift+Enter",
   backendUrl: "http://127.0.0.1:8787",
   clientToken: "",
   promptMode: "coding_agent",
   optimizationMode: "speed",
   restoreClipboard: true,
+  previewEnabled: false,
+  clipboardContextEnabled: false,
+  screenContextEnabled: false,
+  browserContextEnabled: false,
+  localHistoryEnabled: false,
+  appDenylist: [],
   stats: {
     promptsEnhanced: 0,
     acceptedRewrites: 0,
     failedRewrites: 0,
     totalLatencyMs: 0,
-    estimatedTimeSavedMs: 0
+    estimatedTimeSavedMs: 0,
+    regeneratedPreviews: 0,
+    canceledPreviews: 0
   }
 };
+
+interface StoreFile {
+  settings: AppSettings;
+  history: HistoryRecord[];
+  lastReceipt: ContextReceipt | null;
+}
 
 export class SettingsStore {
   private readonly filePath: string;
   private settings: AppSettings;
+  private history: HistoryRecord[];
+  private lastReceipt: ContextReceipt | null;
 
   constructor() {
     this.filePath = join(app.getPath("userData"), "settings.json");
-    this.settings = this.load();
+    const data = this.load();
+    this.settings = data.settings;
+    this.history = data.history;
+    this.lastReceipt = data.lastReceipt;
   }
 
   get(): AppSettings {
@@ -36,6 +56,7 @@ export class SettingsStore {
     this.settings = {
       ...this.settings,
       ...patch,
+      appDenylist: patch.appDenylist ?? this.settings.appDenylist,
       stats: {
         ...this.settings.stats,
         ...(patch.stats ?? {})
@@ -52,7 +73,9 @@ export class SettingsStore {
       acceptedRewrites: stats.acceptedRewrites + 1,
       failedRewrites: stats.failedRewrites,
       totalLatencyMs: stats.totalLatencyMs + latencyMs,
-      estimatedTimeSavedMs: stats.estimatedTimeSavedMs + 45_000
+      estimatedTimeSavedMs: stats.estimatedTimeSavedMs + 45_000,
+      regeneratedPreviews: stats.regeneratedPreviews,
+      canceledPreviews: stats.canceledPreviews
     };
     this.save();
     return this.get();
@@ -68,45 +91,118 @@ export class SettingsStore {
     return this.get();
   }
 
-  private load(): AppSettings {
+  recordRegeneratedPreview(): AppSettings {
+    this.settings.stats = {
+      ...this.settings.stats,
+      regeneratedPreviews: this.settings.stats.regeneratedPreviews + 1
+    };
+    this.save();
+    return this.get();
+  }
+
+  recordCanceledPreview(): AppSettings {
+    this.settings.stats = {
+      ...this.settings.stats,
+      canceledPreviews: this.settings.stats.canceledPreviews + 1
+    };
+    this.save();
+    return this.get();
+  }
+
+  addHistory(record: HistoryRecord): HistoryRecord[] {
+    if (this.settings.localHistoryEnabled) {
+      this.history = [record, ...this.history].slice(0, 25);
+      this.save();
+    }
+    return this.historySnapshot();
+  }
+
+  historySnapshot(): HistoryRecord[] {
+    return structuredClone(this.history);
+  }
+
+  setLastReceipt(receipt: ContextReceipt | null): ContextReceipt | null {
+    this.lastReceipt = receipt ? structuredClone(receipt) : null;
+    this.save();
+    return this.lastReceiptSnapshot();
+  }
+
+  lastReceiptSnapshot(): ContextReceipt | null {
+    return this.lastReceipt ? structuredClone(this.lastReceipt) : null;
+  }
+
+  private load(): StoreFile {
     if (!existsSync(this.filePath)) {
-      return DEFAULT_SETTINGS;
+      return {
+        settings: DEFAULT_SETTINGS,
+        history: [],
+        lastReceipt: null
+      };
     }
 
     try {
-      const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<AppSettings>;
+      const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<StoreFile> & Partial<AppSettings>;
+      const rawSettings = parsed.settings ?? parsed;
       return {
-        ...DEFAULT_SETTINGS,
-        ...parsed,
-        stats: {
-          ...DEFAULT_SETTINGS.stats,
-          ...(parsed.stats ?? {})
-        }
+        settings: {
+          ...DEFAULT_SETTINGS,
+          ...rawSettings,
+          appDenylist: rawSettings.appDenylist ?? DEFAULT_SETTINGS.appDenylist,
+          stats: {
+            ...DEFAULT_SETTINGS.stats,
+            ...(rawSettings.stats ?? {})
+          }
+        },
+        history: Array.isArray(parsed.history) ? parsed.history.slice(0, 25) : [],
+        lastReceipt: parsed.lastReceipt ?? null
       };
     } catch {
-      return DEFAULT_SETTINGS;
+      return {
+        settings: DEFAULT_SETTINGS,
+        history: [],
+        lastReceipt: null
+      };
     }
   }
 
   private save(): void {
     mkdirSync(dirname(this.filePath), { recursive: true });
-    writeFileSync(this.filePath, JSON.stringify(this.settings, null, 2));
+    writeFileSync(
+      this.filePath,
+      JSON.stringify(
+        {
+          settings: this.settings,
+          history: this.history,
+          lastReceipt: this.lastReceipt
+        },
+        null,
+        2
+      )
+    );
   }
 }
 
 export function toDashboardState(
   settings: AppSettings,
   backendHealthy: boolean,
-  registeredHotkey: boolean
+  registeredHotkey: boolean,
+  registeredPreviewHotkey: boolean,
+  pendingPreview: PendingPreview | null,
+  history: HistoryRecord[],
+  lastReceipt: ContextReceipt | null
 ): DashboardState {
   return {
     settings,
     backendHealthy,
     registeredHotkey,
+    registeredPreviewHotkey,
+    pendingPreview,
+    history,
+    lastReceipt,
     platform: process.platform,
     permissions: {
       accessibility: process.platform === "darwin" ? "unknown" : "not_required",
-      screen: "disabled"
+      screen: settings.screenContextEnabled ? "unknown" : "disabled"
     }
   };
 }

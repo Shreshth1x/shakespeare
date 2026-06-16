@@ -7,6 +7,9 @@ const api = {
   checkBackend: (): Promise<boolean> => ipcRenderer.invoke("backend:check"),
   compileSample: (roughPrompt: string): Promise<CompilePromptResponse> => ipcRenderer.invoke("compile:sample", roughPrompt),
   rewriteSelection: (): Promise<{ ok: true } | { ok: false; error: string }> => ipcRenderer.invoke("rewrite:selection"),
+  acceptPreview: (): Promise<{ ok: true } | { ok: false; error: string }> => ipcRenderer.invoke("preview:accept"),
+  cancelPreview: (): Promise<{ ok: true }> => ipcRenderer.invoke("preview:cancel"),
+  regeneratePreview: (): Promise<{ ok: true } | { ok: false; error: string }> => ipcRenderer.invoke("preview:regenerate"),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke("shell:openExternal", url),
   onStateChanged: (callback: (state: DashboardState) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, state: DashboardState): void => callback(state);

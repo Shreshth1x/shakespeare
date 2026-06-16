@@ -8,6 +8,7 @@ export interface PromptContext {
   selected_text?: string | null;
   clipboard_text?: string | null;
   visible_text?: string | null;
+  detected_target?: string | null;
 }
 
 export interface CompilePromptRequest {
@@ -31,16 +32,52 @@ export interface UsageStats {
   failedRewrites: number;
   totalLatencyMs: number;
   estimatedTimeSavedMs: number;
+  regeneratedPreviews: number;
+  canceledPreviews: number;
 }
 
 export interface AppSettings {
   hotkey: string;
+  previewHotkey: string;
   backendUrl: string;
   clientToken: string;
   promptMode: PromptMode;
   optimizationMode: OptimizationMode;
   restoreClipboard: boolean;
+  previewEnabled: boolean;
+  clipboardContextEnabled: boolean;
+  screenContextEnabled: boolean;
+  browserContextEnabled: boolean;
+  localHistoryEnabled: boolean;
+  appDenylist: string[];
   stats: UsageStats;
+}
+
+export interface ContextReceipt {
+  context_used: string[];
+  warnings: string[];
+  model?: string;
+  latency_ms?: number;
+}
+
+export interface HistoryRecord {
+  id: string;
+  createdAt: string;
+  mode: PromptMode;
+  optimizationMode: OptimizationMode;
+  roughPrompt: string;
+  optimizedPrompt: string;
+  contextReceipt: ContextReceipt;
+}
+
+export interface PendingPreview {
+  id: string;
+  roughPrompt: string;
+  optimizedPrompt: string;
+  mode: PromptMode;
+  optimizationMode: OptimizationMode;
+  context: PromptContext;
+  contextReceipt: ContextReceipt;
 }
 
 export interface DashboardState {
@@ -52,4 +89,8 @@ export interface DashboardState {
   };
   platform: NodeJS.Platform;
   registeredHotkey: boolean;
+  registeredPreviewHotkey: boolean;
+  pendingPreview: PendingPreview | null;
+  history: HistoryRecord[];
+  lastReceipt: ContextReceipt | null;
 }
