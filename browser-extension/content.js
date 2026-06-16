@@ -1,4 +1,5 @@
 const BRIDGE_URL = "http://127.0.0.1:8791/v1/browser-context";
+const MESSAGE_TYPE = "shakespeare:browser-context";
 const MAX_VISIBLE_TEXT = 6000;
 const MAX_FIELD_TEXT = 3000;
 
@@ -14,14 +15,46 @@ async function sendContext() {
   if (!payload.visibleText && !payload.selectedText && !payload.focusedText) return;
 
   try {
-    await fetch(BRIDGE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+    await postContext(payload);
   } catch {
     // The desktop app may not be running. Stay silent in the page.
   }
+}
+
+async function postContext(payload) {
+  const backgroundResult = await postViaBackground(payload);
+  if (backgroundResult?.ok) {
+    return;
+  }
+
+  await fetch(BRIDGE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+function postViaBackground(payload) {
+  return new Promise((resolve) => {
+    if (!globalThis.chrome?.runtime?.sendMessage) {
+      resolve(null);
+      return;
+    }
+
+    chrome.runtime.sendMessage(
+      {
+        type: MESSAGE_TYPE,
+        payload
+      },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
+        resolve(response);
+      }
+    );
+  });
 }
 
 function collectContext() {

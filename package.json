@@ -15,6 +15,7 @@
     "build:backend": "tsc -p tsconfig.backend.json",
     "typecheck": "tsc --noEmit",
     "test": "node --test --import tsx test/*.test.ts",
+    "install:native-browser-host": "node scripts/install-native-browser-host.mjs",
     "package": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"
   },

@@ -42,7 +42,7 @@ For local UI work without an OpenAI key, set `SHAKESPEARE_MOCK_MODEL=true` in th
 - App/window denylist to prevent context capture in sensitive surfaces.
 - Context receipt showing model, latency, context sources, and warnings.
 - Local-only prompt history when explicitly enabled.
-- Browser extension bridge for ChatGPT, Claude, Gemini, Gmail, Slack, Notion, Linear, and GitHub context.
+- Browser extension bridge for ChatGPT, Claude, Gemini, Gmail, Slack, Notion, Linear, and GitHub context, with optional native messaging.
 - Manual local screen OCR capture that stores only extracted text and uses it only when `Screen context` is enabled.
 - zsh input-buffer integration for rewriting the current terminal prompt in place.
 - VS Code/Cursor extension bridge for active file, selected code, visible code, diagnostics, and git diff context.
@@ -56,6 +56,17 @@ The unpacked Chrome/Arc/Edge extension lives in `browser-extension/`.
 3. Enable Developer mode.
 4. Load unpacked extension from `browser-extension/`.
 5. In Shakespeare, enable `Browser context` in the Privacy panel.
+
+Optional native messaging host:
+
+1. After loading the unpacked extension, copy its extension ID from `chrome://extensions`.
+2. Install the local native messaging host:
+
+```bash
+npm run install:native-browser-host -- --browser chrome --extension-id <extension-id>
+```
+
+Use `--browser edge` for Microsoft Edge. The extension tries native messaging first and falls back to `127.0.0.1:8791` if the native host is not installed.
 
 The extension sends bounded page context to the local desktop app only:
 
