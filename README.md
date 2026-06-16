@@ -38,6 +38,7 @@ For local UI work without an OpenAI key, set `SHAKESPEARE_MOCK_MODEL=true` in th
 - Editable hotkey, preview hotkey, and backend URL.
 - Optional preview-before-replace flow with accept, regenerate, and cancel.
 - Custom prompt modes with local saved instructions.
+- Local team policy import for shared modes and admin-locked privacy controls.
 - Privacy controls for clipboard context, screen context, local history, and clipboard restoration.
 - App/window denylist to prevent context capture in sensitive surfaces.
 - Context receipt showing model, latency, context sources, and warnings.
@@ -95,6 +96,31 @@ The extension sends bounded editor context to the local desktop app only:
 - Bounded active-file `git diff`, when available.
 
 The desktop app ignores this data unless `IDE context` is enabled.
+
+## Team Policy
+
+The dashboard can import a local team policy JSON file shape. This is the no-Supabase path for shared modes and admin privacy controls:
+
+```json
+{
+  "teamName": "Platform Team",
+  "sharedModes": [
+    {
+      "id": "review",
+      "name": "Review",
+      "instructions": "Rewrite as a bug-focused code review prompt."
+    }
+  ],
+  "privacyControls": {
+    "screenContextEnabled": { "value": false, "locked": true },
+    "localHistoryEnabled": { "value": false, "locked": true }
+  },
+  "appDenylist": ["1Password"],
+  "lockAppDenylist": false
+}
+```
+
+Locked privacy controls override local settings. Shared modes appear alongside local custom modes.
 
 ## Terminal / zsh Integration
 

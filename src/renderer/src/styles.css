@@ -474,6 +474,15 @@ textarea:focus {
   accent-color: #2a9d8f;
 }
 
+.toggle.disabled span {
+  color: #9b9589;
+}
+
+.toggle.disabled input {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .compact-textarea {
   min-height: 104px;
   font-size: 13px;
@@ -482,6 +491,60 @@ textarea:focus {
 .custom-mode-textarea {
   min-height: 120px;
   font-size: 13px;
+}
+
+.policy-textarea {
+  min-height: 138px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.policy-summary,
+.policy-lines {
+  display: grid;
+  gap: 6px;
+}
+
+.policy-summary {
+  margin-bottom: 10px;
+  border-left: 3px solid #2a9d8f;
+  padding-left: 9px;
+}
+
+.policy-summary strong {
+  color: #1f2522;
+  font-size: 14px;
+}
+
+.policy-summary span,
+.policy-line span,
+.policy-line em {
+  color: #6f756f;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.policy-lines {
+  margin-top: 10px;
+}
+
+.policy-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid #d8d0bf;
+  border-radius: 8px;
+  padding: 0 8px;
+  background: #f8f5ef;
+}
+
+.policy-line strong {
+  color: #2a9d8f;
+  font-size: 12px;
 }
 
 .receipt {

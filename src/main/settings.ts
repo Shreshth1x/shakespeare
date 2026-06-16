@@ -1,18 +1,18 @@
 import { app } from "electron";
-import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { applyTeamPolicy, normalizeCustomModes, normalizeTeamPolicy } from "../shared/teamPolicy";
 import type {
   AppSettings,
   BrowserContextSnapshot,
   ContextReceipt,
-  CustomPromptMode,
   DashboardState,
   HistoryRecord,
   IdeContextSnapshot,
   PendingPreview,
   PromptMode,
-  ScreenContextSnapshot
+  ScreenContextSnapshot,
+  TeamPolicy
 } from "../shared/types";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -32,6 +32,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   ideContextEnabled: false,
   localHistoryEnabled: false,
   appDenylist: [],
+  teamPolicy: null,
   stats: {
     promptsEnhanced: 0,
     acceptedRewrites: 0,
@@ -69,23 +70,26 @@ export class SettingsStore {
 
   update(patch: Partial<AppSettings>): AppSettings {
     const customModes = normalizeCustomModes(patch.customModes ?? this.settings.customModes);
+    const teamPolicy = patch.teamPolicy !== undefined ? normalizeTeamPolicy(patch.teamPolicy) : this.settings.teamPolicy;
     const activeCustomModeId = normalizeActiveCustomModeId(
       patch.activeCustomModeId !== undefined ? patch.activeCustomModeId : this.settings.activeCustomModeId,
-      customModes
+      customModes,
+      teamPolicy
     );
     const promptMode = normalizePromptMode(patch.promptMode ?? this.settings.promptMode, activeCustomModeId);
-    this.settings = {
+    this.settings = applyTeamPolicy({
       ...this.settings,
       ...patch,
       promptMode: promptMode === "custom" && !activeCustomModeId ? DEFAULT_SETTINGS.promptMode : promptMode,
       activeCustomModeId,
       customModes,
-      appDenylist: patch.appDenylist ?? this.settings.appDenylist,
+      teamPolicy,
+      appDenylist: teamPolicy?.lockAppDenylist ? this.settings.appDenylist : (patch.appDenylist ?? this.settings.appDenylist),
       stats: {
         ...this.settings.stats,
         ...(patch.stats ?? {})
       }
-    };
+    });
     this.save();
     return this.get();
   }
@@ -168,21 +172,23 @@ export class SettingsStore {
       const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<StoreFile> & Partial<AppSettings>;
       const rawSettings = parsed.settings ?? parsed;
       const customModes = normalizeCustomModes(rawSettings.customModes);
-      const activeCustomModeId = normalizeActiveCustomModeId(rawSettings.activeCustomModeId, customModes);
+      const teamPolicy = normalizeTeamPolicy(rawSettings.teamPolicy);
+      const activeCustomModeId = normalizeActiveCustomModeId(rawSettings.activeCustomModeId, customModes, teamPolicy);
       const promptMode = normalizePromptMode(rawSettings.promptMode, activeCustomModeId);
       return {
-        settings: {
+        settings: applyTeamPolicy({
           ...DEFAULT_SETTINGS,
           ...rawSettings,
           promptMode,
           activeCustomModeId,
           customModes,
+          teamPolicy,
           appDenylist: rawSettings.appDenylist ?? DEFAULT_SETTINGS.appDenylist,
           stats: {
             ...DEFAULT_SETTINGS.stats,
             ...(rawSettings.stats ?? {})
           }
-        },
+        }),
         history: Array.isArray(parsed.history) ? parsed.history.slice(0, 25) : [],
         lastReceipt: parsed.lastReceipt ?? null
       };
@@ -212,38 +218,10 @@ export class SettingsStore {
   }
 }
 
-function normalizeCustomModes(input: unknown): CustomPromptMode[] {
-  if (!Array.isArray(input)) return [];
-  const seen = new Set<string>();
-  const now = new Date().toISOString();
-
-  return input
-    .filter((item): item is Partial<CustomPromptMode> => Boolean(item) && typeof item === "object")
-    .map((item) => {
-      const rawId = typeof item.id === "string" && item.id.trim() ? item.id.trim() : `custom-${randomUUID()}`;
-      const id = rawId.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80);
-      return {
-        id,
-        name: typeof item.name === "string" ? item.name.trim().slice(0, 80) : "",
-        instructions: typeof item.instructions === "string" ? item.instructions.trim().slice(0, 1800) : "",
-        createdAt: typeof item.createdAt === "string" ? item.createdAt : now,
-        updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : now
-      };
-    })
-    .filter((item) => {
-      if (!item.id || !item.name || !item.instructions || seen.has(item.id)) {
-        return false;
-      }
-      seen.add(item.id);
-      return true;
-    })
-    .slice(0, 12);
-}
-
-function normalizeActiveCustomModeId(input: unknown, customModes: CustomPromptMode[]): string | null {
+function normalizeActiveCustomModeId(input: unknown, customModes: AppSettings["customModes"], teamPolicy: TeamPolicy | null): string | null {
   if (typeof input !== "string" || !input.trim()) return null;
   const id = input.trim();
-  return customModes.some((mode) => mode.id === id) ? id : null;
+  return customModes.some((mode) => mode.id === id) || teamPolicy?.sharedModes.some((mode) => mode.id === id) ? id : null;
 }
 
 function normalizePromptMode(input: unknown, activeCustomModeId: string | null): PromptMode {

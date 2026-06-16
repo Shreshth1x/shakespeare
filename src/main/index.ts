@@ -9,6 +9,7 @@ import { createScreenContextService } from "./screenContext";
 import { SettingsStore, toDashboardState } from "./settings";
 import { captureSelectedText, getActiveWindowContext, pasteReplacement } from "./textReplacement";
 import { detectTargetTool, isAppDenied } from "../shared/appDetection";
+import { effectiveAppDenylist, findCustomMode } from "../shared/teamPolicy";
 import type {
   AppSettings,
   CompilePromptRequest,
@@ -202,7 +203,7 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
       ideBridge.getLatest(),
       screenContext.getLatest()
     );
-    if (isAppDenied(context, settings.appDenylist)) {
+    if (isAppDenied(context, effectiveAppDenylist(settings))) {
       throw new Error("This app or window is on your denylist.");
     }
 
@@ -363,7 +364,7 @@ function resolveCustomMode(settings: AppSettings): CustomPromptModeInput | undef
     return undefined;
   }
 
-  const customMode = settings.customModes.find((mode) => mode.id === settings.activeCustomModeId);
+  const customMode = findCustomMode(settings, settings.activeCustomModeId);
   if (!customMode) {
     return undefined;
   }

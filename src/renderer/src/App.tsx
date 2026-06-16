@@ -15,6 +15,7 @@ import {
   Settings,
   Shield,
   Trash2,
+  Users,
   X
 } from "lucide-react";
 import type {
@@ -25,8 +26,10 @@ import type {
   CustomPromptMode,
   DashboardState,
   OptimizationMode,
+  PrivacyControlKey,
   PromptMode
 } from "../../shared/types";
+import { PRIVACY_CONTROL_LABELS, findCustomMode, isPrivacyControlLocked } from "../../shared/teamPolicy";
 import "./styles.css";
 
 const PROMPT_MODES: Array<{ value: BuiltInPromptMode; label: string }> = [
@@ -41,6 +44,30 @@ const OPTIMIZATION_MODES: Array<{ value: OptimizationMode; label: string }> = [
   { value: "quality", label: "Quality" }
 ];
 
+const TEAM_POLICY_TEMPLATE = {
+  teamName: "Shakespeare Team",
+  sharedModes: [
+    {
+      id: "team-code-review",
+      name: "Team review",
+      instructions:
+        "Rewrite as a code review prompt. Prioritize bugs, regressions, missing tests, privacy risks, and exact verification steps."
+    }
+  ],
+  privacyControls: {
+    screenContextEnabled: {
+      value: false,
+      locked: true
+    },
+    localHistoryEnabled: {
+      value: false,
+      locked: true
+    }
+  },
+  appDenylist: ["1Password", "Private Browsing"],
+  lockAppDenylist: false
+};
+
 const api = window.shakespeare ?? createPreviewApi();
 
 export default function App(): JSX.Element {
@@ -51,6 +78,7 @@ export default function App(): JSX.Element {
   const [customDraftId, setCustomDraftId] = useState<string | null>(null);
   const [customNameDraft, setCustomNameDraft] = useState("");
   const [customInstructionDraft, setCustomInstructionDraft] = useState("");
+  const [teamPolicyDraft, setTeamPolicyDraft] = useState(JSON.stringify(TEAM_POLICY_TEMPLATE, null, 2));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,6 +87,7 @@ export default function App(): JSX.Element {
       setState(next);
       setDenylistDraft(next.settings.appDenylist.join("\n"));
       primeCustomDraft(next.settings.customModes, next.settings.activeCustomModeId);
+      setTeamPolicyDraft(JSON.stringify(next.settings.teamPolicy ?? TEAM_POLICY_TEMPLATE, null, 2));
     });
     return api.onStateChanged((next) => {
       setState(next);
@@ -240,6 +269,20 @@ export default function App(): JSX.Element {
     }
   }
 
+  async function applyTeamPolicyDraft(): Promise<void> {
+    try {
+      const parsed = JSON.parse(teamPolicyDraft) as AppSettings["teamPolicy"];
+      await updateSettings({ teamPolicy: parsed });
+    } catch {
+      setError("Team policy must be valid JSON.");
+    }
+  }
+
+  async function clearTeamPolicy(): Promise<void> {
+    await updateSettings({ teamPolicy: null });
+    setTeamPolicyDraft(JSON.stringify(TEAM_POLICY_TEMPLATE, null, 2));
+  }
+
   async function captureScreenContext(): Promise<void> {
     setBusy(true);
     setError(null);
@@ -261,6 +304,7 @@ export default function App(): JSX.Element {
     setState(next);
   }
 
+  const settings = state.settings;
   const enabled = state.backendHealthy && state.registeredHotkey;
   const receipt = sampleResult ? receiptFromResponse(sampleResult) : state.lastReceipt;
   const browserContextLabel = state.browserContext
@@ -272,7 +316,19 @@ export default function App(): JSX.Element {
   const screenContextLabel = state.screenContext
     ? `${state.screenContext.sourceName} · ${state.screenContext.latencyMs} ms`
     : "No capture";
-  const activeCustomMode = state.settings.customModes.find((mode) => mode.id === state.settings.activeCustomModeId);
+  const sharedModes = settings.teamPolicy?.sharedModes ?? [];
+  const availableCustomModes = [...sharedModes, ...settings.customModes];
+  const activeCustomMode = settings.activeCustomModeId ? findCustomMode(settings, settings.activeCustomModeId) : null;
+  const teamPolicy = settings.teamPolicy;
+  const denylistLocked = Boolean(teamPolicy?.lockAppDenylist);
+
+  function isLocked(key: PrivacyControlKey): boolean {
+    return isPrivacyControlLocked(settings, key);
+  }
+
+  function lockedLabel(label: string, key: PrivacyControlKey): string {
+    return isLocked(key) ? `${label} · locked` : label;
+  }
 
   return (
     <main className="shell">
@@ -336,11 +392,11 @@ export default function App(): JSX.Element {
               </button>
             ))}
           </div>
-          {state.settings.customModes.length ? (
+          {availableCustomModes.length ? (
             <div className="custom-mode-picker">
               <span>Custom</span>
               <div>
-                {state.settings.customModes.slice(0, 4).map((mode) => (
+                {availableCustomModes.slice(0, 4).map((mode) => (
                   <button
                     key={mode.id}
                     className={state.settings.promptMode === "custom" && state.settings.activeCustomModeId === mode.id ? "selected" : ""}
@@ -450,18 +506,21 @@ export default function App(): JSX.Element {
             Privacy
           </div>
           <Toggle
-            label="Preview before replace"
+            label={lockedLabel("Preview before replace", "previewEnabled")}
             checked={state.settings.previewEnabled}
+            disabled={isLocked("previewEnabled")}
             onChange={(previewEnabled) => updateSettings({ previewEnabled })}
           />
           <Toggle
-            label="Clipboard context"
+            label={lockedLabel("Clipboard context", "clipboardContextEnabled")}
             checked={state.settings.clipboardContextEnabled}
+            disabled={isLocked("clipboardContextEnabled")}
             onChange={(clipboardContextEnabled) => updateSettings({ clipboardContextEnabled })}
           />
           <Toggle
-            label="Screen context"
+            label={lockedLabel("Screen context", "screenContextEnabled")}
             checked={state.settings.screenContextEnabled}
+            disabled={isLocked("screenContextEnabled")}
             onChange={(screenContextEnabled) => updateSettings({ screenContextEnabled })}
           />
           <div className="button-row context-buttons">
@@ -474,29 +533,75 @@ export default function App(): JSX.Element {
             </button>
           </div>
           <Toggle
-            label="Browser context"
+            label={lockedLabel("Browser context", "browserContextEnabled")}
             checked={state.settings.browserContextEnabled}
+            disabled={isLocked("browserContextEnabled")}
             onChange={(browserContextEnabled) => updateSettings({ browserContextEnabled })}
           />
           <Toggle
-            label="IDE context"
+            label={lockedLabel("IDE context", "ideContextEnabled")}
             checked={state.settings.ideContextEnabled}
+            disabled={isLocked("ideContextEnabled")}
             onChange={(ideContextEnabled) => updateSettings({ ideContextEnabled })}
           />
           <Toggle
-            label="Local history"
+            label={lockedLabel("Local history", "localHistoryEnabled")}
             checked={state.settings.localHistoryEnabled}
+            disabled={isLocked("localHistoryEnabled")}
             onChange={(localHistoryEnabled) => updateSettings({ localHistoryEnabled })}
           />
           <Toggle
-            label="Restore clipboard"
+            label={lockedLabel("Restore clipboard", "restoreClipboard")}
             checked={state.settings.restoreClipboard}
+            disabled={isLocked("restoreClipboard")}
             onChange={(restoreClipboard) => updateSettings({ restoreClipboard })}
           />
         </div>
       </section>
 
       <section className="settings-grid">
+        <div className="panel">
+          <div className="panel-title">
+            <Users size={18} />
+            Team policy
+          </div>
+          {teamPolicy ? (
+            <div className="policy-summary">
+              <strong>{teamPolicy.teamName}</strong>
+              <span>{teamPolicy.sharedModes.length} shared modes</span>
+              <span>{Object.keys(teamPolicy.privacyControls).length} admin controls</span>
+            </div>
+          ) : (
+            <p className="muted">No team policy applied.</p>
+          )}
+          <textarea
+            className="policy-textarea"
+            value={teamPolicyDraft}
+            onChange={(event) => setTeamPolicyDraft(event.target.value)}
+          />
+          <div className="button-row">
+            <button className="secondary" onClick={() => void applyTeamPolicyDraft()}>
+              <Check size={16} />
+              Apply policy
+            </button>
+            <button className="ghost" onClick={() => void clearTeamPolicy()} disabled={!teamPolicy}>
+              <X size={16} />
+              Clear
+            </button>
+          </div>
+          {teamPolicy ? (
+            <div className="policy-lines">
+              {Object.entries(teamPolicy.privacyControls).map(([key, control]) => (
+                <div className="policy-line" key={key}>
+                  <span>{PRIVACY_CONTROL_LABELS[key as PrivacyControlKey]}</span>
+                  <strong>{control.value ? "on" : "off"}</strong>
+                  <em>{control.locked ? "locked" : "default"}</em>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
         <div className="panel">
           <div className="panel-title">
             <Plus size={18} />
@@ -549,15 +654,16 @@ export default function App(): JSX.Element {
         <div className="panel">
           <div className="panel-title">
             <X size={18} />
-            Denylist
+            Denylist{denylistLocked ? " · locked" : ""}
           </div>
           <textarea
             className="compact-textarea"
             value={denylistDraft}
             placeholder="One app, domain, or window title per line"
+            disabled={denylistLocked}
             onChange={(event) => setDenylistDraft(event.target.value)}
           />
-          <button className="secondary" onClick={saveDenylist}>
+          <button className="secondary" onClick={saveDenylist} disabled={denylistLocked}>
             Save denylist
           </button>
         </div>
@@ -631,16 +737,18 @@ function Metric({ icon, label, value }: { icon: JSX.Element; label: string; valu
 function Toggle({
   label,
   checked,
+  disabled = false,
   onChange
 }: {
   label: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (checked: boolean) => void | Promise<void>;
 }): JSX.Element {
   return (
-    <label className="toggle">
+    <label className={`toggle ${disabled ? "disabled" : ""}`}>
       <span>{label}</span>
-      <input type="checkbox" checked={checked} onChange={(event) => void onChange(event.target.checked)} />
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(event) => void onChange(event.target.checked)} />
     </label>
   );
 }
@@ -788,6 +896,32 @@ function createPreviewApi(): Window["shakespeare"] {
       ideContextEnabled: false,
       localHistoryEnabled: false,
       appDenylist: ["1Password"],
+      teamPolicy: {
+        teamName: "Shakespeare Team",
+        updatedAt: new Date().toISOString(),
+        sharedModes: [
+          {
+            id: "team-code-review",
+            name: "Team review",
+            instructions:
+              "Rewrite as a code review prompt. Prioritize bugs, regressions, missing tests, privacy risks, and exact verification steps.",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }
+        ],
+        privacyControls: {
+          screenContextEnabled: {
+            value: false,
+            locked: true
+          },
+          localHistoryEnabled: {
+            value: false,
+            locked: true
+          }
+        },
+        appDenylist: ["1Password", "Private Browsing"],
+        lockAppDenylist: false
+      },
       stats: {
         promptsEnhanced: 18,
         acceptedRewrites: 17,
