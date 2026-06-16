@@ -43,6 +43,7 @@ For local UI work without an OpenAI key, set `SHAKESPEARE_MOCK_MODEL=true` in th
 - Local-only prompt history when explicitly enabled.
 - Browser extension bridge for ChatGPT, Claude, Gemini, Gmail, Slack, Notion, Linear, and GitHub context.
 - Manual local screen OCR capture that stores only extracted text and uses it only when `Screen context` is enabled.
+- zsh input-buffer integration for rewriting the current terminal prompt in place.
 
 ## Browser Context Extension
 
@@ -62,6 +63,39 @@ The extension sends bounded page context to the local desktop app only:
 - Bounded visible page text from the main page area.
 
 The desktop app ignores this data unless `Browser context` is enabled.
+
+## Terminal / zsh Integration
+
+The zsh widget lives in `integrations/shell/shakespeare.zsh`.
+
+Add this to `~/.zshrc`:
+
+```bash
+source /Users/shreshth/Documents/Shakespeare/integrations/shell/shakespeare.zsh
+```
+
+Then restart your shell. While editing a terminal prompt, press:
+
+```text
+Ctrl-X Ctrl-P
+```
+
+The widget sends the current zsh `BUFFER` to the Shakespeare backend and replaces the buffer with the optimized prompt.
+
+Optional environment overrides:
+
+```bash
+export SHAKESPEARE_BACKEND_URL=http://127.0.0.1:8787
+export SHAKESPEARE_PROMPT_MODE=coding_agent
+export SHAKESPEARE_OPTIMIZATION_MODE=speed
+export SHAKESPEARE_ZSH_KEY='^X^P'
+```
+
+You can also use the CLI directly:
+
+```bash
+printf 'fix this failing auth test' | npx shakespeare-compile
+```
 
 ## Required Backend Secrets
 

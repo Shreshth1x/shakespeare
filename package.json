@@ -4,6 +4,9 @@
   "description": "Cross-platform context-aware prompt compiler for macOS and Windows.",
   "main": "out/main/index.js",
   "type": "module",
+  "bin": {
+    "shakespeare-compile": "scripts/compile-prompt.mjs"
+  },
   "scripts": {
     "dev": "concurrently -k -n backend,app \"npm run dev:backend\" \"npm run dev:app\"",
     "dev:app": "electron-vite dev",
@@ -23,6 +26,9 @@
     },
     "files": [
       "out/**/*",
+      "browser-extension/**/*",
+      "integrations/**/*",
+      "scripts/**/*",
       "package.json"
     ],
     "mac": {
