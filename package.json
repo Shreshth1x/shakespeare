@@ -21,6 +21,7 @@
     "build:backend": "tsc -p tsconfig.backend.json",
     "typecheck": "tsc --noEmit",
     "test": "node --test --import tsx test/*.test.ts",
+    "eval:router": "tsx scripts/eval-router.ts",
     "check:syntax": "node --check browser-extension/background.js && node --check browser-extension/content.js && node --check browser-extension/popup.js && node --check scripts/native-browser-host.mjs && node --check scripts/install-native-browser-host.mjs && node --check scripts/qa-package-smoke.mjs && node --check integrations/vscode/extension.js",
     "install:native-browser-host": "node scripts/install-native-browser-host.mjs",
     "package": "npm run build && electron-builder --dir",

@@ -380,7 +380,18 @@ function toReceipt(source: CompilePromptResponse | ContextReceipt): ContextRecei
     context_used: source.context_used,
     warnings: source.warnings,
     model: source.model,
-    latency_ms: source.latency_ms
+    latency_ms: source.latency_ms,
+    route_mode: source.route_mode,
+    route_target: source.route_target,
+    route_pattern: source.route_pattern,
+    route_failure_mode: source.route_failure_mode,
+    used_fallback: source.used_fallback,
+    timed_out: source.timed_out,
+    routing_latency_ms: source.routing_latency_ms,
+    backend_latency_ms: source.backend_latency_ms,
+    context_source_count: source.context_source_count,
+    context_char_count: source.context_char_count,
+    output_char_count: source.output_char_count
   };
 }
 

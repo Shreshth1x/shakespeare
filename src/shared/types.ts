@@ -4,6 +4,62 @@ export type PromptMode = BuiltInPromptMode | "custom";
 
 export type OptimizationMode = "speed" | "quality" | "max_quality";
 
+export type RouterMode =
+  | "coding_agent"
+  | "debugging"
+  | "research"
+  | "extraction"
+  | "writing_reply"
+  | "decision_advice"
+  | "creative"
+  | "general";
+
+export type RouterTarget =
+  | "codex"
+  | "claude_code"
+  | "cursor"
+  | "chatgpt"
+  | "claude"
+  | "gmail"
+  | "slack"
+  | "notion"
+  | "linear"
+  | "github"
+  | "unknown";
+
+export type RouterFailureMode =
+  | "too_vague"
+  | "missing_context"
+  | "wrong_scope"
+  | "wrong_output_shape"
+  | "hallucination_risk"
+  | "agent_overbuild"
+  | "agent_underbuild"
+  | "needs_decomposition"
+  | "tone_mismatch"
+  | "parseability";
+
+export type RouterPattern =
+  | "agent_fix"
+  | "debug_root_cause"
+  | "research_compare"
+  | "extract_schema"
+  | "reply_draft"
+  | "decision_matrix"
+  | "creative_brief"
+  | "general_task";
+
+export interface RouterDecision {
+  mode: RouterMode;
+  target: RouterTarget;
+  failureMode: RouterFailureMode;
+  pattern: RouterPattern;
+  contextBudgetChars: number;
+  outputBudgetTokens: number;
+  reasoningEffort: "none" | "minimal" | "low";
+  needsModel: boolean;
+}
+
 export interface PromptContext {
   active_app?: string | null;
   window_title?: string | null;
@@ -42,6 +98,17 @@ export interface CompilePromptResponse {
   warnings: string[];
   model?: string;
   latency_ms?: number;
+  route_mode?: RouterDecision["mode"];
+  route_target?: RouterDecision["target"];
+  route_pattern?: RouterDecision["pattern"];
+  route_failure_mode?: RouterDecision["failureMode"];
+  used_fallback?: boolean;
+  timed_out?: boolean;
+  routing_latency_ms?: number;
+  backend_latency_ms?: number;
+  context_source_count?: number;
+  context_char_count?: number;
+  output_char_count?: number;
 }
 
 export interface UsageStats {
@@ -116,6 +183,17 @@ export interface ContextReceipt {
   warnings: string[];
   model?: string;
   latency_ms?: number;
+  route_mode?: RouterDecision["mode"];
+  route_target?: RouterDecision["target"];
+  route_pattern?: RouterDecision["pattern"];
+  route_failure_mode?: RouterDecision["failureMode"];
+  used_fallback?: boolean;
+  timed_out?: boolean;
+  routing_latency_ms?: number;
+  backend_latency_ms?: number;
+  context_source_count?: number;
+  context_char_count?: number;
+  output_char_count?: number;
 }
 
 export interface HistoryRecord {

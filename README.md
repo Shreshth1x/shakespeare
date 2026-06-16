@@ -47,6 +47,7 @@ For local UI work without an OpenAI key, set `SHAKESPEARE_MOCK_MODEL=true` in th
 - Manual local screen OCR capture that stores only extracted text and uses it only when `Screen context` is enabled.
 - zsh input-buffer integration for rewriting the current terminal prompt in place.
 - VS Code/Cursor extension bridge for active file, selected code, visible code, diagnostics, and git diff context.
+- Latency-optimized Speed router with deterministic local classification, compact model packets, pattern-specific fallbacks, and route metadata.
 
 ## Browser Context Extension
 
@@ -190,9 +191,21 @@ OPENAI_MODEL_SPEED=gpt-5.4-nano
 OPENAI_MODEL_QUALITY=gpt-5.4-mini
 SHAKESPEARE_CLIENT_TOKEN=
 PORT=8787
+SHAKESPEARE_FAST_ROUTER=true
+SHAKESPEARE_SPEED_MODEL_TIMEOUT_MS=1200
 ```
 
 `SHAKESPEARE_CLIENT_TOKEN` is only required when the backend is not localhost-only.
+
+Speed mode uses the latency-optimized router by default. The router classifies the request locally, builds a compact model packet, prepares a deterministic fallback immediately, and lets the model result win only if it returns inside the deadline. Set `SHAKESPEARE_FAST_ROUTER=false` to temporarily return to the legacy compiler path.
+
+For local testing without a provider key, set `SHAKESPEARE_MOCK_MODEL=true` or leave `OPENAI_API_KEY` unset; Speed mode will still return a pattern-specific local router fallback with route metadata.
+
+Router smoke eval:
+
+```bash
+npm run eval:router
+```
 
 ## Release Packaging
 

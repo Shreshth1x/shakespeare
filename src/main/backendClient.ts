@@ -19,7 +19,7 @@ export async function compilePrompt(settings: AppSettings, request: CompilePromp
       ...(settings.clientToken ? { Authorization: `Bearer ${settings.clientToken}` } : {})
     },
     body: JSON.stringify(request),
-    signal: AbortSignal.timeout(request.optimization_mode === "speed" ? 1800 : 3200)
+    signal: AbortSignal.timeout(request.optimization_mode === "speed" ? 1500 : 3200)
   });
 
   const body = (await response.json()) as CompilePromptResponse | { error?: string };

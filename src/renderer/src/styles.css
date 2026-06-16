@@ -565,6 +565,10 @@ textarea:focus {
   font-weight: 700;
 }
 
+.receipt .fallback {
+  color: #b45d48;
+}
+
 .browser-context-line {
   display: grid;
   grid-template-columns: auto auto 1fr;

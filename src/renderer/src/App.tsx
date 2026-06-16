@@ -790,6 +790,12 @@ function Receipt({ receipt }: { receipt: ContextReceipt | null }): JSX.Element {
     <div className="receipt">
       <span>{receipt.model ?? "model unknown"}</span>
       <span>{receipt.latency_ms != null ? `${receipt.latency_ms} ms` : "latency unknown"}</span>
+      {receipt.route_pattern ? <span>{receipt.route_pattern}</span> : null}
+      {receipt.route_mode ? <span>{receipt.route_mode}</span> : null}
+      {receipt.route_target ? <span>{receipt.route_target}</span> : null}
+      {receipt.used_fallback ? <span className="fallback">fallback</span> : null}
+      {receipt.timed_out ? <span className="fallback">timeout</span> : null}
+      {receipt.context_char_count != null ? <span>{receipt.context_char_count} context chars</span> : null}
       <span>{receipt.context_used.length ? receipt.context_used.join(", ") : "selected text only"}</span>
       {receipt.warnings.length ? <em>{receipt.warnings.join(" ")}</em> : null}
     </div>
@@ -810,7 +816,18 @@ function receiptFromResponse(response: CompilePromptResponse): ContextReceipt {
     context_used: response.context_used,
     warnings: response.warnings,
     model: response.model,
-    latency_ms: response.latency_ms
+    latency_ms: response.latency_ms,
+    route_mode: response.route_mode,
+    route_target: response.route_target,
+    route_pattern: response.route_pattern,
+    route_failure_mode: response.route_failure_mode,
+    used_fallback: response.used_fallback,
+    timed_out: response.timed_out,
+    routing_latency_ms: response.routing_latency_ms,
+    backend_latency_ms: response.backend_latency_ms,
+    context_source_count: response.context_source_count,
+    context_char_count: response.context_char_count,
+    output_char_count: response.output_char_count
   };
 }
 
@@ -864,7 +881,14 @@ function createPreviewApi(): Window["shakespeare"] {
       context_used: ["selected_text", "active_app", "detected_target"],
       warnings: [],
       model: "gpt-5.4-nano",
-      latency_ms: 980
+      latency_ms: 980,
+      route_mode: "coding_agent",
+      route_target: "codex",
+      route_pattern: "agent_fix",
+      route_failure_mode: "agent_overbuild",
+      used_fallback: false,
+      timed_out: false,
+      context_char_count: 118
     },
     platform: "darwin",
     permissions: {
@@ -956,7 +980,14 @@ function createPreviewApi(): Window["shakespeare"] {
       context_used: ["selected_text"],
       warnings: [],
       model: state.settings.optimizationMode === "speed" ? "gpt-5.4-nano" : "gpt-5.4-mini",
-      latency_ms: 980
+      latency_ms: 980,
+      route_mode: "coding_agent",
+      route_target: "unknown",
+      route_pattern: "agent_fix",
+      route_failure_mode: "agent_overbuild",
+      used_fallback: false,
+      timed_out: false,
+      context_char_count: roughPrompt.length
     }),
     rewriteSelection: async () => ({ ok: true }),
     acceptPreview: async () => ({ ok: true }),
