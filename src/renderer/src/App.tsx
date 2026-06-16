@@ -8,24 +8,28 @@ import {
   Gauge,
   History,
   Keyboard,
+  Plus,
   Play,
   RefreshCw,
   RotateCw,
   Settings,
   Shield,
+  Trash2,
   X
 } from "lucide-react";
 import type {
   AppSettings,
+  BuiltInPromptMode,
   CompilePromptResponse,
   ContextReceipt,
+  CustomPromptMode,
   DashboardState,
   OptimizationMode,
   PromptMode
 } from "../../shared/types";
 import "./styles.css";
 
-const PROMPT_MODES: Array<{ value: PromptMode; label: string }> = [
+const PROMPT_MODES: Array<{ value: BuiltInPromptMode; label: string }> = [
   { value: "coding_agent", label: "Agent" },
   { value: "general", label: "General" },
   { value: "debugging", label: "Debug" },
@@ -44,6 +48,9 @@ export default function App(): JSX.Element {
   const [samplePrompt, setSamplePrompt] = useState("fix this auth bug and make sure tests pass");
   const [sampleResult, setSampleResult] = useState<CompilePromptResponse | null>(null);
   const [denylistDraft, setDenylistDraft] = useState("");
+  const [customDraftId, setCustomDraftId] = useState<string | null>(null);
+  const [customNameDraft, setCustomNameDraft] = useState("");
+  const [customInstructionDraft, setCustomInstructionDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +58,7 @@ export default function App(): JSX.Element {
     void api.getState().then((next) => {
       setState(next);
       setDenylistDraft(next.settings.appDenylist.join("\n"));
+      primeCustomDraft(next.settings.customModes, next.settings.activeCustomModeId);
     });
     return api.onStateChanged((next) => {
       setState(next);
@@ -153,6 +161,85 @@ export default function App(): JSX.Element {
     });
   }
 
+  function primeCustomDraft(customModes: CustomPromptMode[], activeCustomModeId: string | null): void {
+    const mode = customModes.find((candidate) => candidate.id === activeCustomModeId) ?? customModes[0];
+    if (!mode) return;
+    setCustomDraftId(mode.id);
+    setCustomNameDraft(mode.name);
+    setCustomInstructionDraft(mode.instructions);
+  }
+
+  function editCustomMode(mode: CustomPromptMode): void {
+    setCustomDraftId(mode.id);
+    setCustomNameDraft(mode.name);
+    setCustomInstructionDraft(mode.instructions);
+  }
+
+  function newCustomMode(): void {
+    setCustomDraftId(null);
+    setCustomNameDraft("");
+    setCustomInstructionDraft("");
+  }
+
+  async function selectCustomMode(mode: CustomPromptMode): Promise<void> {
+    editCustomMode(mode);
+    await updateSettings({
+      promptMode: "custom",
+      activeCustomModeId: mode.id
+    });
+  }
+
+  async function saveCustomMode(): Promise<void> {
+    if (!state) return;
+    const settings = state.settings;
+    const name = customNameDraft.trim();
+    const instructions = customInstructionDraft.trim();
+    if (!name || !instructions) {
+      setError("Custom modes need a name and instructions.");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const id = customDraftId ?? `custom-${crypto.randomUUID()}`;
+    const existing = settings.customModes.find((mode) => mode.id === id);
+    const nextMode: CustomPromptMode = {
+      id,
+      name,
+      instructions,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now
+    };
+    const nextModes = existing
+      ? settings.customModes.map((mode) => (mode.id === id ? nextMode : mode))
+      : [nextMode, ...settings.customModes].slice(0, 12);
+
+    await updateSettings({
+      customModes: nextModes,
+      activeCustomModeId: id,
+      promptMode: "custom"
+    });
+    setCustomDraftId(id);
+  }
+
+  async function deleteCustomMode(): Promise<void> {
+    if (!state) return;
+    if (!customDraftId) return;
+    const settings = state.settings;
+
+    const nextModes = settings.customModes.filter((mode) => mode.id !== customDraftId);
+    await updateSettings({
+      customModes: nextModes,
+      activeCustomModeId: settings.activeCustomModeId === customDraftId ? null : settings.activeCustomModeId,
+      promptMode: settings.promptMode === "custom" && settings.activeCustomModeId === customDraftId ? "coding_agent" : settings.promptMode
+    });
+    const nextMode = nextModes[0];
+    if (nextMode) {
+      editCustomMode(nextMode);
+    } else {
+      newCustomMode();
+    }
+  }
+
   async function captureScreenContext(): Promise<void> {
     setBusy(true);
     setError(null);
@@ -185,6 +272,7 @@ export default function App(): JSX.Element {
   const screenContextLabel = state.screenContext
     ? `${state.screenContext.sourceName} · ${state.screenContext.latencyMs} ms`
     : "No capture";
+  const activeCustomMode = state.settings.customModes.find((mode) => mode.id === state.settings.activeCustomModeId);
 
   return (
     <main className="shell">
@@ -248,6 +336,25 @@ export default function App(): JSX.Element {
               </button>
             ))}
           </div>
+          {state.settings.customModes.length ? (
+            <div className="custom-mode-picker">
+              <span>Custom</span>
+              <div>
+                {state.settings.customModes.slice(0, 4).map((mode) => (
+                  <button
+                    key={mode.id}
+                    className={state.settings.promptMode === "custom" && state.settings.activeCustomModeId === mode.id ? "selected" : ""}
+                    onClick={() => void selectCustomMode(mode)}
+                  >
+                    {mode.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {state.settings.promptMode === "custom" && activeCustomMode ? (
+            <p className="mode-note">Using {activeCustomMode.name}</p>
+          ) : null}
         </div>
       </section>
 
@@ -390,6 +497,55 @@ export default function App(): JSX.Element {
       </section>
 
       <section className="settings-grid">
+        <div className="panel">
+          <div className="panel-title">
+            <Plus size={18} />
+            Custom modes
+          </div>
+          {state.settings.customModes.length ? (
+            <div className="custom-mode-list">
+              {state.settings.customModes.map((mode) => (
+                <button
+                  key={mode.id}
+                  className={customDraftId === mode.id ? "selected" : ""}
+                  onClick={() => editCustomMode(mode)}
+                >
+                  {mode.name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">No custom modes yet.</p>
+          )}
+          <label className="text-setting">
+            <span>Mode name</span>
+            <input value={customNameDraft} onChange={(event) => setCustomNameDraft(event.target.value)} />
+          </label>
+          <label className="text-setting">
+            <span>Instructions</span>
+            <textarea
+              className="custom-mode-textarea"
+              value={customInstructionDraft}
+              placeholder="Rewrite for architecture reviews. Emphasize trade-offs, risks, and specific implementation steps."
+              onChange={(event) => setCustomInstructionDraft(event.target.value)}
+            />
+          </label>
+          <div className="button-row">
+            <button className="secondary" onClick={() => void saveCustomMode()}>
+              <Check size={16} />
+              Save mode
+            </button>
+            <button className="ghost" onClick={newCustomMode}>
+              <Plus size={16} />
+              New
+            </button>
+            <button className="ghost" onClick={() => void deleteCustomMode()} disabled={!customDraftId}>
+              <Trash2 size={16} />
+              Delete
+            </button>
+          </div>
+        </div>
+
         <div className="panel">
           <div className="panel-title">
             <X size={18} />
@@ -613,6 +769,16 @@ function createPreviewApi(): Window["shakespeare"] {
       backendUrl: "http://127.0.0.1:8787",
       clientToken: "",
       promptMode: "coding_agent",
+      activeCustomModeId: "custom-review",
+      customModes: [
+        {
+          id: "custom-review",
+          name: "Review",
+          instructions: "Rewrite the request as a concise code review prompt. Prioritize bugs, regressions, missing tests, and exact file references.",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ],
       optimizationMode: "speed",
       restoreClipboard: true,
       previewEnabled: false,

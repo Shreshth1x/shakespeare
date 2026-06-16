@@ -220,6 +220,54 @@ h1 {
   color: #1f2522;
 }
 
+.custom-mode-picker {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.custom-mode-picker span,
+.mode-note {
+  color: #6f756f;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.custom-mode-picker div,
+.custom-mode-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.custom-mode-picker button,
+.custom-mode-list button {
+  max-width: 170px;
+  min-height: 30px;
+  overflow: hidden;
+  border: 1px solid #d8d0bf;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #f8f5ef;
+  color: #4f5a54;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-mode-picker button.selected,
+.custom-mode-list button.selected {
+  border-color: #1f2522;
+  background: #e9c46a;
+  color: #1f2522;
+}
+
+.mode-note {
+  margin: 8px 0 0;
+}
+
 .metrics {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
@@ -428,6 +476,11 @@ textarea:focus {
 
 .compact-textarea {
   min-height: 104px;
+  font-size: 13px;
+}
+
+.custom-mode-textarea {
+  min-height: 120px;
   font-size: 13px;
 }
 

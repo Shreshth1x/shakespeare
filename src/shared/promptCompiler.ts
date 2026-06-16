@@ -1,6 +1,13 @@
-import type { CompilePromptRequest, OptimizationMode, PromptMode, PromptContext } from "./types.js";
+import type {
+  BuiltInPromptMode,
+  CompilePromptRequest,
+  CustomPromptModeInput,
+  OptimizationMode,
+  PromptMode,
+  PromptContext
+} from "./types.js";
 
-const MODE_GUIDANCE: Record<PromptMode, string> = {
+const MODE_GUIDANCE: Record<BuiltInPromptMode, string> = {
   general:
     "Rewrite for a general LLM. Make the task clear, preserve intent, add useful constraints, and include an output format only when it helps.",
   coding_agent:
@@ -11,11 +18,21 @@ const MODE_GUIDANCE: Record<PromptMode, string> = {
     "Rewrite for research. Clarify the research question, scope, source expectations, comparison dimensions, caveats, and output format."
 };
 
-export function buildCompilerInstructions(mode: PromptMode, optimizationMode: OptimizationMode): string {
+export function buildCompilerInstructions(
+  mode: PromptMode,
+  optimizationMode: OptimizationMode,
+  customMode?: CustomPromptModeInput
+): string {
   const speedRule =
     optimizationMode === "speed"
       ? "Optimize for speed and brevity. Produce a strong rewrite, but do not over-elaborate."
       : "Optimize for a more careful rewrite. Add structure where it materially improves the prompt.";
+  const modeGuidance =
+    mode === "custom" && customMode
+      ? `Rewrite using this user-defined prompt mode named "${customMode.name}". Follow these mode instructions where they fit the user's intent, while preserving all global rules: ${customMode.instructions}`
+      : mode === "custom"
+        ? MODE_GUIDANCE.general
+        : MODE_GUIDANCE[mode];
 
   return [
     "You rewrite rough user requests into high-quality prompts for LLMs and coding agents.",
@@ -23,7 +40,7 @@ export function buildCompilerInstructions(mode: PromptMode, optimizationMode: Op
     "Use provided context only when it clearly helps. If context is ambiguous, phrase it as observed context.",
     "Return only the rewritten prompt. No preamble, no markdown fence, no explanation.",
     speedRule,
-    MODE_GUIDANCE[mode]
+    modeGuidance
   ].join("\n");
 }
 
@@ -35,6 +52,7 @@ export function buildCompilerInput(request: CompilePromptRequest): string {
       rough_prompt: request.rough_prompt,
       mode: request.mode,
       optimization_mode: request.optimization_mode,
+      custom_mode: request.custom_mode ? { name: request.custom_mode.name } : undefined,
       context
     },
     null,
@@ -74,12 +92,17 @@ export function validateCompileRequest(input: unknown): { ok: true; value: Compi
 
   const mode = body.mode ?? "general";
   if (!isPromptMode(mode)) {
-    return { ok: false, error: "`mode` must be general, coding_agent, debugging, or research." };
+    return { ok: false, error: "`mode` must be general, coding_agent, debugging, research, or custom." };
   }
 
   const optimizationMode = body.optimization_mode ?? "speed";
   if (!isOptimizationMode(optimizationMode)) {
     return { ok: false, error: "`optimization_mode` must be speed, quality, or max_quality." };
+  }
+
+  const customMode = mode === "custom" ? normalizeCustomMode(body.custom_mode) : undefined;
+  if (customMode?.ok === false) {
+    return { ok: false, error: customMode.error };
   }
 
   return {
@@ -88,7 +111,8 @@ export function validateCompileRequest(input: unknown): { ok: true; value: Compi
       rough_prompt: body.rough_prompt.trim(),
       mode,
       optimization_mode: optimizationMode,
-      context: body.context ?? {}
+      context: body.context ?? {},
+      custom_mode: customMode?.value
     }
   };
 }
@@ -139,6 +163,18 @@ export function compilePromptLocally(request: CompilePromptRequest): string {
       .join("\n");
   }
 
+  if (request.mode === "custom" && request.custom_mode) {
+    return [
+      `Custom mode: ${request.custom_mode.name}`,
+      `Task: ${request.rough_prompt}`,
+      visibleBits.length ? `Context: ${visibleBits.join(" ")}` : null,
+      `Mode instructions: ${request.custom_mode.instructions}`,
+      "Preserve the user's intent, use observed context only where relevant, and do not add unsupported facts."
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
   return [
     `Please help with the following task: ${request.rough_prompt}`,
     visibleBits.length ? `Use this observed context where relevant: ${visibleBits.join(" ")}` : null,
@@ -177,9 +213,32 @@ function contextMaxLength(key: keyof PromptContext): number {
 }
 
 function isPromptMode(value: unknown): value is PromptMode {
-  return value === "general" || value === "coding_agent" || value === "debugging" || value === "research";
+  return value === "general" || value === "coding_agent" || value === "debugging" || value === "research" || value === "custom";
 }
 
 function isOptimizationMode(value: unknown): value is OptimizationMode {
   return value === "speed" || value === "quality" || value === "max_quality";
+}
+
+function normalizeCustomMode(input: unknown): { ok: true; value: CustomPromptModeInput } | { ok: false; error: string } {
+  if (!input || typeof input !== "object") {
+    return { ok: false, error: "`custom_mode` is required when `mode` is custom." };
+  }
+
+  const customMode = input as Partial<CustomPromptModeInput>;
+  if (typeof customMode.name !== "string" || customMode.name.trim().length === 0) {
+    return { ok: false, error: "`custom_mode.name` is required when `mode` is custom." };
+  }
+
+  if (typeof customMode.instructions !== "string" || customMode.instructions.trim().length === 0) {
+    return { ok: false, error: "`custom_mode.instructions` is required when `mode` is custom." };
+  }
+
+  return {
+    ok: true,
+    value: {
+      name: truncate(customMode.name, 80),
+      instructions: truncate(customMode.instructions, 1800)
+    }
+  };
 }

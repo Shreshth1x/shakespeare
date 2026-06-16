@@ -30,12 +30,53 @@ test("validateCompileRequest rejects unsupported modes", () => {
   assert.equal(result.ok, false);
 });
 
+test("validateCompileRequest accepts custom modes with instructions", () => {
+  const result = validateCompileRequest({
+    rough_prompt: "make this sharper",
+    mode: "custom",
+    optimization_mode: "speed",
+    custom_mode: {
+      name: "Architecture review",
+      instructions: "Emphasize trade-offs, risks, and verification."
+    }
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.mode, "custom");
+    assert.equal(result.value.custom_mode?.name, "Architecture review");
+  }
+});
+
+test("validateCompileRequest rejects custom modes without instructions", () => {
+  const result = validateCompileRequest({
+    rough_prompt: "make this sharper",
+    mode: "custom"
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.error, /custom_mode/);
+  }
+});
+
 test("coding-agent instructions include scoped verification guidance", () => {
   const instructions = buildCompilerInstructions("coding_agent", "speed");
 
   assert.match(instructions, /inspect relevant files/i);
   assert.match(instructions, /avoid unrelated edits/i);
   assert.match(instructions, /Return only the rewritten prompt/i);
+});
+
+test("custom instructions include user-defined mode guidance", () => {
+  const instructions = buildCompilerInstructions("custom", "speed", {
+    name: "Architecture review",
+    instructions: "Emphasize trade-offs and rollout risks."
+  });
+
+  assert.match(instructions, /Architecture review/);
+  assert.match(instructions, /trade-offs/);
+  assert.match(instructions, /Preserve the user's intent/);
 });
 
 test("contextUsed reports only non-empty context fields", () => {
@@ -101,4 +142,23 @@ test("local fallback includes IDE context when provided", () => {
   assert.match(prompt, /Active file: src\/main\/index.ts/);
   assert.match(prompt, /Diagnostics: Error/);
   assert.match(prompt, /Git diff:/);
+});
+
+test("local fallback includes custom mode instructions", () => {
+  const prompt = compilePromptLocally({
+    rough_prompt: "review this plan",
+    mode: "custom",
+    optimization_mode: "speed",
+    custom_mode: {
+      name: "Operator brief",
+      instructions: "Rewrite into a concise operator-facing brief with risks and next actions."
+    },
+    context: {
+      active_app: "Shakespeare dashboard"
+    }
+  });
+
+  assert.match(prompt, /Custom mode: Operator brief/);
+  assert.match(prompt, /operator-facing brief/);
+  assert.match(prompt, /Task: review this plan/);
 });

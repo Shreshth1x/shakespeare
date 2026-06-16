@@ -37,6 +37,7 @@ For local UI work without an OpenAI key, set `SHAKESPEARE_MOCK_MODEL=true` in th
 - Global rewrite hotkey with Speed/Quality modes.
 - Editable hotkey, preview hotkey, and backend URL.
 - Optional preview-before-replace flow with accept, regenerate, and cancel.
+- Custom prompt modes with local saved instructions.
 - Privacy controls for clipboard context, screen context, local history, and clipboard restoration.
 - App/window denylist to prevent context capture in sensitive surfaces.
 - Context receipt showing model, latency, context sources, and warnings.

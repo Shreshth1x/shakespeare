@@ -14,6 +14,7 @@ import type {
   CompilePromptRequest,
   CompilePromptResponse,
   ContextReceipt,
+  CustomPromptModeInput,
   HistoryRecord,
   PendingPreview,
   PromptContext
@@ -143,12 +144,10 @@ function registerIpc(): void {
   ipcMain.handle("compile:sample", async (_event, roughPrompt: string) => {
     const settings = store.get();
     const startedAt = Date.now();
-    const response = await compilePrompt(settings, {
-      rough_prompt: roughPrompt,
-      mode: settings.promptMode,
-      optimization_mode: settings.optimizationMode,
-      context: { active_app: "Shakespeare dashboard", selected_text: roughPrompt }
-    });
+    const response = await compilePrompt(
+      settings,
+      buildCompileRequest(roughPrompt, { active_app: "Shakespeare dashboard", selected_text: roughPrompt }, settings)
+    );
     store.setLastReceipt(toReceipt(response));
     addHistory(roughPrompt, response.optimized_prompt, response, settings);
     store.recordSuccess(Date.now() - startedAt);
@@ -207,12 +206,7 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
       throw new Error("This app or window is on your denylist.");
     }
 
-    const request: CompilePromptRequest = {
-      rough_prompt: selection.selectedText,
-      mode: settings.promptMode,
-      optimization_mode: settings.optimizationMode,
-      context
-    };
+    const request = buildCompileRequest(selection.selectedText, context, settings);
 
     const response = await compilePrompt(settings, request);
     store.setLastReceipt(toReceipt(response));
@@ -296,7 +290,8 @@ async function regeneratePreview(): Promise<{ ok: true } | { ok: false; error: s
     const response = await compilePrompt(settings, {
       ...pendingPreview.request,
       optimization_mode: settings.optimizationMode,
-      mode: settings.promptMode
+      mode: settings.promptMode,
+      custom_mode: resolveCustomMode(settings)
     });
     pendingPreview = {
       ...pendingPreview,
@@ -350,6 +345,32 @@ function buildContext(
   return {
     ...base,
     detected_target: detectedTarget
+  };
+}
+
+function buildCompileRequest(roughPrompt: string, context: PromptContext, settings: AppSettings): CompilePromptRequest {
+  return {
+    rough_prompt: roughPrompt,
+    mode: settings.promptMode,
+    optimization_mode: settings.optimizationMode,
+    context,
+    custom_mode: resolveCustomMode(settings)
+  };
+}
+
+function resolveCustomMode(settings: AppSettings): CustomPromptModeInput | undefined {
+  if (settings.promptMode !== "custom" || !settings.activeCustomModeId) {
+    return undefined;
+  }
+
+  const customMode = settings.customModes.find((mode) => mode.id === settings.activeCustomModeId);
+  if (!customMode) {
+    return undefined;
+  }
+
+  return {
+    name: customMode.name,
+    instructions: customMode.instructions
   };
 }
 

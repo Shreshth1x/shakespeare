@@ -38,7 +38,7 @@ export async function compileWithModel(request: CompilePromptRequest): Promise<C
     },
     body: JSON.stringify({
       model,
-      instructions: buildCompilerInstructions(request.mode, request.optimization_mode),
+      instructions: buildCompilerInstructions(request.mode, request.optimization_mode, request.custom_mode),
       input: buildCompilerInput(request),
       store: false,
       reasoning: { effort: "minimal" },

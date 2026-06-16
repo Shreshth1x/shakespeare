@@ -1,14 +1,17 @@
 import { app } from "electron";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type {
   AppSettings,
   BrowserContextSnapshot,
   ContextReceipt,
+  CustomPromptMode,
   DashboardState,
   HistoryRecord,
   IdeContextSnapshot,
   PendingPreview,
+  PromptMode,
   ScreenContextSnapshot
 } from "../shared/types";
 
@@ -18,6 +21,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   backendUrl: "http://127.0.0.1:8787",
   clientToken: "",
   promptMode: "coding_agent",
+  activeCustomModeId: null,
+  customModes: [],
   optimizationMode: "speed",
   restoreClipboard: true,
   previewEnabled: false,
@@ -63,9 +68,18 @@ export class SettingsStore {
   }
 
   update(patch: Partial<AppSettings>): AppSettings {
+    const customModes = normalizeCustomModes(patch.customModes ?? this.settings.customModes);
+    const activeCustomModeId = normalizeActiveCustomModeId(
+      patch.activeCustomModeId !== undefined ? patch.activeCustomModeId : this.settings.activeCustomModeId,
+      customModes
+    );
+    const promptMode = normalizePromptMode(patch.promptMode ?? this.settings.promptMode, activeCustomModeId);
     this.settings = {
       ...this.settings,
       ...patch,
+      promptMode: promptMode === "custom" && !activeCustomModeId ? DEFAULT_SETTINGS.promptMode : promptMode,
+      activeCustomModeId,
+      customModes,
       appDenylist: patch.appDenylist ?? this.settings.appDenylist,
       stats: {
         ...this.settings.stats,
@@ -153,10 +167,16 @@ export class SettingsStore {
     try {
       const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<StoreFile> & Partial<AppSettings>;
       const rawSettings = parsed.settings ?? parsed;
+      const customModes = normalizeCustomModes(rawSettings.customModes);
+      const activeCustomModeId = normalizeActiveCustomModeId(rawSettings.activeCustomModeId, customModes);
+      const promptMode = normalizePromptMode(rawSettings.promptMode, activeCustomModeId);
       return {
         settings: {
           ...DEFAULT_SETTINGS,
           ...rawSettings,
+          promptMode,
+          activeCustomModeId,
+          customModes,
           appDenylist: rawSettings.appDenylist ?? DEFAULT_SETTINGS.appDenylist,
           stats: {
             ...DEFAULT_SETTINGS.stats,
@@ -190,6 +210,52 @@ export class SettingsStore {
       )
     );
   }
+}
+
+function normalizeCustomModes(input: unknown): CustomPromptMode[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  const now = new Date().toISOString();
+
+  return input
+    .filter((item): item is Partial<CustomPromptMode> => Boolean(item) && typeof item === "object")
+    .map((item) => {
+      const rawId = typeof item.id === "string" && item.id.trim() ? item.id.trim() : `custom-${randomUUID()}`;
+      const id = rawId.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 80);
+      return {
+        id,
+        name: typeof item.name === "string" ? item.name.trim().slice(0, 80) : "",
+        instructions: typeof item.instructions === "string" ? item.instructions.trim().slice(0, 1800) : "",
+        createdAt: typeof item.createdAt === "string" ? item.createdAt : now,
+        updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : now
+      };
+    })
+    .filter((item) => {
+      if (!item.id || !item.name || !item.instructions || seen.has(item.id)) {
+        return false;
+      }
+      seen.add(item.id);
+      return true;
+    })
+    .slice(0, 12);
+}
+
+function normalizeActiveCustomModeId(input: unknown, customModes: CustomPromptMode[]): string | null {
+  if (typeof input !== "string" || !input.trim()) return null;
+  const id = input.trim();
+  return customModes.some((mode) => mode.id === id) ? id : null;
+}
+
+function normalizePromptMode(input: unknown, activeCustomModeId: string | null): PromptMode {
+  if (input === "custom") {
+    return activeCustomModeId ? "custom" : DEFAULT_SETTINGS.promptMode;
+  }
+
+  if (input === "general" || input === "coding_agent" || input === "debugging" || input === "research") {
+    return input;
+  }
+
+  return DEFAULT_SETTINGS.promptMode;
 }
 
 export function toDashboardState(

@@ -1,4 +1,6 @@
-export type PromptMode = "general" | "coding_agent" | "debugging" | "research";
+export type BuiltInPromptMode = "general" | "coding_agent" | "debugging" | "research";
+
+export type PromptMode = BuiltInPromptMode | "custom";
 
 export type OptimizationMode = "speed" | "quality" | "max_quality";
 
@@ -31,6 +33,7 @@ export interface CompilePromptRequest {
   mode: PromptMode;
   optimization_mode: OptimizationMode;
   context?: PromptContext;
+  custom_mode?: CustomPromptModeInput;
 }
 
 export interface CompilePromptResponse {
@@ -57,6 +60,8 @@ export interface AppSettings {
   backendUrl: string;
   clientToken: string;
   promptMode: PromptMode;
+  activeCustomModeId: string | null;
+  customModes: CustomPromptMode[];
   optimizationMode: OptimizationMode;
   restoreClipboard: boolean;
   previewEnabled: boolean;
@@ -67,6 +72,19 @@ export interface AppSettings {
   localHistoryEnabled: boolean;
   appDenylist: string[];
   stats: UsageStats;
+}
+
+export interface CustomPromptMode {
+  id: string;
+  name: string;
+  instructions: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomPromptModeInput {
+  name: string;
+  instructions: string;
 }
 
 export interface ContextReceipt {
