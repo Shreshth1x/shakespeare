@@ -155,6 +155,33 @@ You can also use the CLI directly:
 printf 'fix this failing auth test' | npx shakespeare-compile
 ```
 
+## PowerShell Integration
+
+The Windows PowerShell/Windows Terminal widget lives in `integrations/powershell/ShakespearePrompt.ps1`.
+
+Add this to your PowerShell profile:
+
+```powershell
+. "C:\path\to\shakespeare\integrations\powershell\ShakespearePrompt.ps1"
+```
+
+Then restart PowerShell. While editing a terminal prompt, press:
+
+```text
+Ctrl+x,Ctrl+p
+```
+
+The widget sends the current PSReadLine buffer to the Shakespeare backend and replaces the buffer with the optimized prompt.
+
+Optional environment overrides:
+
+```powershell
+$env:SHAKESPEARE_BACKEND_URL = "http://127.0.0.1:8787"
+$env:SHAKESPEARE_PROMPT_MODE = "coding_agent"
+$env:SHAKESPEARE_OPTIMIZATION_MODE = "speed"
+$env:SHAKESPEARE_POWERSHELL_KEY = "Ctrl+x,Ctrl+p"
+```
+
 ## Required Backend Secrets
 
 ```bash
