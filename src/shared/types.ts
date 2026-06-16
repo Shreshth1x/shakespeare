@@ -9,6 +9,12 @@ export interface PromptContext {
   clipboard_text?: string | null;
   visible_text?: string | null;
   detected_target?: string | null;
+  browser_url?: string | null;
+  browser_title?: string | null;
+  browser_hostname?: string | null;
+  browser_selection?: string | null;
+  browser_focused_text?: string | null;
+  browser_visible_text?: string | null;
 }
 
 export interface CompilePromptRequest {
@@ -80,6 +86,17 @@ export interface PendingPreview {
   contextReceipt: ContextReceipt;
 }
 
+export interface BrowserContextSnapshot {
+  url: string;
+  title: string;
+  hostname: string;
+  selectedText: string;
+  focusedText: string;
+  visibleText: string;
+  updatedAt: string;
+  source: "browser_extension";
+}
+
 export interface DashboardState {
   settings: AppSettings;
   backendHealthy: boolean;
@@ -93,4 +110,9 @@ export interface DashboardState {
   pendingPreview: PendingPreview | null;
   history: HistoryRecord[];
   lastReceipt: ContextReceipt | null;
+  browserContext: BrowserContextSnapshot | null;
+  browserBridge: {
+    port: number;
+    running: boolean;
+  };
 }

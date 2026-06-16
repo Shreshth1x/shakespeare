@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { compilePrompt, checkBackend } from "./backendClient";
+import { createBrowserContextBridge } from "./browserContextBridge";
 import { SettingsStore, toDashboardState } from "./settings";
 import { captureSelectedText, getActiveWindowContext, pasteReplacement } from "./textReplacement";
 import { detectTargetTool, isAppDenied } from "../shared/appDetection";
@@ -24,6 +25,7 @@ let store: SettingsStore;
 let backendHealthy = false;
 let registeredHotkey = false;
 let registeredPreviewHotkey = false;
+const browserBridge = createBrowserContextBridge();
 let pendingPreview:
   | (PendingPreview & {
       previousClipboardText: string;
@@ -34,6 +36,7 @@ let pendingPreview:
 
 app.whenReady().then(async () => {
   store = new SettingsStore();
+  await browserBridge.start();
   backendHealthy = await checkBackend(store.get());
   createWindow();
   createTray();
@@ -167,7 +170,13 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
     }
 
     const windowContext = await getActiveWindowContext();
-    const context = buildContext(windowContext, selection.selectedText, selection.previousClipboardText, settings);
+    const context = buildContext(
+      windowContext,
+      selection.selectedText,
+      selection.previousClipboardText,
+      settings,
+      browserBridge.getLatest()
+    );
     if (isAppDenied(context, settings.appDenylist)) {
       throw new Error("This app or window is on your denylist.");
     }
@@ -285,12 +294,19 @@ function buildContext(
   windowContext: PromptContext,
   selectedText: string,
   previousClipboardText: string,
-  settings: AppSettings
+  settings: AppSettings,
+  browserContext = browserBridge.getLatest()
 ): PromptContext {
   const base: PromptContext = {
     ...windowContext,
     selected_text: selectedText,
-    clipboard_text: settings.clipboardContextEnabled ? previousClipboardText : null
+    clipboard_text: settings.clipboardContextEnabled ? previousClipboardText : null,
+    browser_url: settings.browserContextEnabled ? browserContext?.url : null,
+    browser_title: settings.browserContextEnabled ? browserContext?.title : null,
+    browser_hostname: settings.browserContextEnabled ? browserContext?.hostname : null,
+    browser_selection: settings.browserContextEnabled ? browserContext?.selectedText : null,
+    browser_focused_text: settings.browserContextEnabled ? browserContext?.focusedText : null,
+    browser_visible_text: settings.browserContextEnabled ? browserContext?.visibleText : null
   };
   const detectedTarget = detectTargetTool(base);
   return {
@@ -337,7 +353,12 @@ function dashboardState() {
     registeredPreviewHotkey,
     pendingPreview ? stripPendingPreview(pendingPreview) : null,
     store.historySnapshot(),
-    store.lastReceiptSnapshot()
+    store.lastReceiptSnapshot(),
+    browserBridge.getLatest(),
+    {
+      port: browserBridge.port,
+      running: browserBridge.running
+    }
   );
 }
 

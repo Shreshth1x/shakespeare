@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Shakespeare Context Bridge",
+  "version": "0.1.0",
+  "description": "Sends current page context to the local Shakespeare desktop app when enabled.",
+  "permissions": ["storage", "tabs", "scripting"],
+  "host_permissions": ["http://127.0.0.1:8791/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*", "https://claude.ai/*", "https://gemini.google.com/*", "https://mail.google.com/*", "https://app.slack.com/*", "https://www.notion.so/*", "https://linear.app/*", "https://github.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Shakespeare",
+    "default_popup": "popup.html"
+  }
+}

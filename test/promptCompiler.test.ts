@@ -65,3 +65,18 @@ test("local fallback creates a useful coding-agent prompt", () => {
   assert.match(prompt, /inspect/);
   assert.match(prompt, /verify/);
 });
+
+test("local fallback includes browser context when provided", () => {
+  const prompt = compilePromptLocally({
+    rough_prompt: "summarize this",
+    mode: "general",
+    optimization_mode: "speed",
+    context: {
+      browser_url: "https://chatgpt.com/c/example",
+      browser_selection: "Important thread text"
+    }
+  });
+
+  assert.match(prompt, /Browser URL/);
+  assert.match(prompt, /Important thread text/);
+});

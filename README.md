@@ -41,6 +41,26 @@ For local UI work without an OpenAI key, set `SHAKESPEARE_MOCK_MODEL=true` in th
 - App/window denylist to prevent context capture in sensitive surfaces.
 - Context receipt showing model, latency, context sources, and warnings.
 - Local-only prompt history when explicitly enabled.
+- Browser extension bridge for ChatGPT, Claude, Gemini, Gmail, Slack, Notion, Linear, and GitHub context.
+
+## Browser Context Extension
+
+The unpacked Chrome/Arc/Edge extension lives in `browser-extension/`.
+
+1. Start the Electron app so the local browser bridge is listening on `127.0.0.1:8791`.
+2. Open `chrome://extensions`.
+3. Enable Developer mode.
+4. Load unpacked extension from `browser-extension/`.
+5. In Shakespeare, enable `Browser context` in the Privacy panel.
+
+The extension sends bounded page context to the local desktop app only:
+
+- URL, title, and hostname.
+- Current browser selection.
+- Focused input/contenteditable text.
+- Bounded visible page text from the main page area.
+
+The desktop app ignores this data unless `Browser context` is enabled.
 
 ## Required Backend Secrets
 

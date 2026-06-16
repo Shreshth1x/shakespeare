@@ -18,6 +18,15 @@ test("detectTargetTool infers common AI and coding surfaces", () => {
     }),
     "Cursor"
   );
+
+  assert.equal(
+    detectTargetTool({
+      active_app: "Google Chrome",
+      browser_hostname: "claude.ai",
+      browser_title: "Claude"
+    }),
+    "Claude"
+  );
 });
 
 test("isAppDenied matches configured app or window fragments", () => {

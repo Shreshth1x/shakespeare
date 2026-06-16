@@ -155,6 +155,9 @@ export default function App(): JSX.Element {
 
   const enabled = state.backendHealthy && state.registeredHotkey;
   const receipt = sampleResult ? receiptFromResponse(sampleResult) : state.lastReceipt;
+  const browserContextLabel = state.browserContext
+    ? `${state.browserContext.hostname || "browser"} · ${new Date(state.browserContext.updatedAt).toLocaleTimeString()}`
+    : "No fresh page";
 
   return (
     <main className="shell">
@@ -328,6 +331,11 @@ export default function App(): JSX.Element {
             onChange={(screenContextEnabled) => updateSettings({ screenContextEnabled })}
           />
           <Toggle
+            label="Browser context"
+            checked={state.settings.browserContextEnabled}
+            onChange={(browserContextEnabled) => updateSettings({ browserContextEnabled })}
+          />
+          <Toggle
             label="Local history"
             checked={state.settings.localHistoryEnabled}
             onChange={(localHistoryEnabled) => updateSettings({ localHistoryEnabled })}
@@ -363,6 +371,11 @@ export default function App(): JSX.Element {
             Context receipt
           </div>
           <Receipt receipt={receipt} />
+          <div className="browser-context-line">
+            <span>Browser bridge</span>
+            <strong>{state.browserBridge.running ? `:${state.browserBridge.port}` : "offline"}</strong>
+            <em>{browserContextLabel}</em>
+          </div>
           {state.history.length > 0 ? (
             <div className="history-list">
               {state.history.slice(0, 3).map((record) => (
@@ -385,6 +398,11 @@ export default function App(): JSX.Element {
           label="Preview key"
           value={state.registeredPreviewHotkey ? "Registered" : "Missing"}
           good={state.registeredPreviewHotkey}
+        />
+        <StatusPill
+          label="Browser"
+          value={state.browserBridge.running ? "Bridge on" : "Bridge off"}
+          good={state.browserBridge.running}
         />
         <StatusPill label="Platform" value={state.platform} good />
       </section>
@@ -485,6 +503,20 @@ function createPreviewApi(): Window["shakespeare"] {
     backendHealthy: true,
     registeredHotkey: true,
     registeredPreviewHotkey: true,
+    browserBridge: {
+      port: 8791,
+      running: true
+    },
+    browserContext: {
+      url: "https://chatgpt.com/c/example",
+      title: "ChatGPT",
+      hostname: "chatgpt.com",
+      selectedText: "fix this auth bug",
+      focusedText: "fix this auth bug",
+      visibleText: "ChatGPT conversation about an auth bug",
+      updatedAt: new Date().toISOString(),
+      source: "browser_extension"
+    },
     pendingPreview: null,
     history: [],
     lastReceipt: {

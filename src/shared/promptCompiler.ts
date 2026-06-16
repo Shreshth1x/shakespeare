@@ -99,6 +99,11 @@ export function compilePromptLocally(request: CompilePromptRequest): string {
     context.active_app ? `Active app: ${context.active_app}.` : null,
     context.window_title ? `Window: ${context.window_title}.` : null,
     context.detected_target ? `Detected target: ${context.detected_target}.` : null,
+    context.browser_url ? `Browser URL: ${context.browser_url}.` : null,
+    context.browser_title ? `Browser title: ${context.browser_title}.` : null,
+    context.browser_selection ? `Browser selection: ${context.browser_selection}` : null,
+    context.browser_focused_text ? `Browser focused text: ${context.browser_focused_text}` : null,
+    context.browser_visible_text ? `Browser context: ${context.browser_visible_text}` : null,
     context.visible_text ? `Observed context: ${context.visible_text}` : null
   ].filter(Boolean);
 

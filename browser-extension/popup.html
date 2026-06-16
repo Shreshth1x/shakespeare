@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shakespeare</title>
+    <style>
+      body {
+        width: 250px;
+        margin: 0;
+        padding: 14px;
+        background: #f8f5ef;
+        color: #1f2522;
+        font: 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font: 700 20px Georgia, serif;
+      }
+
+      p {
+        margin: 0 0 12px;
+        color: #58625d;
+        line-height: 1.35;
+      }
+
+      button {
+        width: 100%;
+        min-height: 34px;
+        border: 0;
+        border-radius: 8px;
+        background: #1f2522;
+        color: #fffdf7;
+        font-weight: 750;
+        cursor: pointer;
+      }
+
+      #status {
+        margin-top: 10px;
+        color: #2a9d8f;
+        font-weight: 750;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Shakespeare</h1>
+    <p>Sends the current page's selected text and nearby context to the local desktop app.</p>
+    <button id="send">Send current page</button>
+    <div id="status"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

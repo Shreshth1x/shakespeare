@@ -1,7 +1,7 @@
 import type { PromptContext } from "./types.js";
 
 const TARGET_PATTERNS: Array<{ target: string; patterns: RegExp[] }> = [
-  { target: "Claude Code", patterns: [/claude code/i, /\bclaude\b/i] },
+  { target: "Claude Code", patterns: [/claude code/i] },
   { target: "Codex", patterns: [/\bcodex\b/i] },
   { target: "Cursor", patterns: [/\bcursor\b/i] },
   { target: "VS Code", patterns: [/visual studio code/i, /\bvs code\b/i, /\bcode\b/i] },
@@ -19,7 +19,9 @@ const TARGET_PATTERNS: Array<{ target: string; patterns: RegExp[] }> = [
 ];
 
 export function detectTargetTool(context: PromptContext): string | null {
-  const haystack = [context.active_app, context.window_title].filter(Boolean).join(" ");
+  const haystack = [context.active_app, context.window_title, context.browser_hostname, context.browser_title, context.browser_url]
+    .filter(Boolean)
+    .join(" ");
   if (!haystack) return null;
 
   for (const candidate of TARGET_PATTERNS) {
