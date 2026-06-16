@@ -965,6 +965,8 @@ function Receipt({ receipt }: { receipt: ContextReceipt | null }): JSX.Element {
     <div className="receipt">
       <span>{receipt.model ?? "model unknown"}</span>
       <span>{receipt.latency_ms != null ? `${receipt.latency_ms} ms` : "latency unknown"}</span>
+      {receipt.route_archetype ? <span>{receipt.route_archetype}</span> : null}
+      {receipt.route_value_primitive ? <span>{receipt.route_value_primitive}</span> : null}
       {receipt.route_pattern ? <span>{receipt.route_pattern}</span> : null}
       {receipt.route_mode ? <span>{receipt.route_mode}</span> : null}
       {receipt.route_target ? <span>{receipt.route_target}</span> : null}
@@ -1002,6 +1004,8 @@ function receiptFromResponse(response: CompilePromptResponse): ContextReceipt {
     model: response.model,
     latency_ms: response.latency_ms,
     route_mode: response.route_mode,
+    route_archetype: response.route_archetype,
+    route_value_primitive: response.route_value_primitive,
     route_target: response.route_target,
     route_pattern: response.route_pattern,
     route_failure_mode: response.route_failure_mode,
@@ -1067,6 +1071,8 @@ function createPreviewApi(): Window["shakespeare"] {
       model: "gpt-5.4-nano",
       latency_ms: 980,
       route_mode: "coding_agent",
+      route_archetype: "coding_implementation",
+      route_value_primitive: "acceptance_contract",
       route_target: "codex",
       route_pattern: "agent_fix",
       route_failure_mode: "agent_overbuild",
@@ -1166,6 +1172,8 @@ function createPreviewApi(): Window["shakespeare"] {
       model: state.settings.optimizationMode === "speed" ? "gpt-5.4-nano" : "gpt-5.4-mini",
       latency_ms: 980,
       route_mode: "coding_agent",
+      route_archetype: "coding_implementation",
+      route_value_primitive: "acceptance_contract",
       route_target: "unknown",
       route_pattern: "agent_fix",
       route_failure_mode: "agent_overbuild",

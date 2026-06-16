@@ -5,10 +5,18 @@ export type PromptMode = BuiltInPromptMode | "custom";
 export type OptimizationMode = "speed" | "quality" | "max_quality";
 
 export type RouterMode =
+  | "writing"
+  | "practical_guidance"
   | "coding_agent"
   | "debugging"
   | "research"
   | "extraction"
+  | "summarization_translation"
+  | "learning_tutoring"
+  | "marketing_sales"
+  | "job_career"
+  | "image_prompt"
+  | "tool_reference"
   | "writing_reply"
   | "decision_advice"
   | "creative"
@@ -36,23 +44,85 @@ export type RouterFailureMode =
   | "agent_overbuild"
   | "agent_underbuild"
   | "missing_reference_workflow"
+  | "ignored_tool"
+  | "missing_evidence"
+  | "missing_audience"
+  | "missing_schema"
+  | "missing_acceptance"
+  | "missing_visual_verification"
+  | "high_stakes_uncertainty"
+  | "generic_advice"
+  | "no_recommendation"
+  | "missing_learning_loop"
+  | "generic_copy"
+  | "fabrication_risk"
+  | "bland_options"
+  | "vague_visual_direction"
   | "needs_decomposition"
   | "tone_mismatch"
   | "parseability";
 
 export type RouterPattern =
+  | "write_edit"
+  | "practical_plan"
   | "agent_fix"
   | "ui_redesign"
   | "debug_root_cause"
   | "research_compare"
   | "extract_schema"
+  | "summarize_translate"
+  | "teach_practice"
+  | "marketing_artifact"
+  | "career_artifact"
+  | "image_generation_prompt"
+  | "tool_workflow"
   | "reply_draft"
   | "decision_matrix"
   | "creative_brief"
   | "general_task";
 
+export type RouterArchetype =
+  | "writing_editing"
+  | "practical_guidance"
+  | "research_info"
+  | "decision_support"
+  | "coding_implementation"
+  | "debugging"
+  | "extraction_transformation"
+  | "summarization_translation"
+  | "learning_tutoring"
+  | "marketing_sales_seo"
+  | "job_career"
+  | "creative_brainstorming"
+  | "image_visual_prompt"
+  | "tool_reference_workflow"
+  | "ui_redesign_reference";
+
+export type RouterValuePrimitive =
+  | "tool_binding"
+  | "reference_extraction"
+  | "evidence_contract"
+  | "decision_contract"
+  | "deliverable_contract"
+  | "acceptance_contract"
+  | "schema_contract"
+  | "fidelity_contract"
+  | "audience_tone_contract"
+  | "learning_contract"
+  | "reproduction_contract"
+  | "visual_verification_contract"
+  | "safety_uncertainty_contract"
+  | "practical_plan_contract"
+  | "marketing_contract"
+  | "career_evidence_contract"
+  | "creative_diversity_contract"
+  | "image_visual_contract"
+  | "generic_clarity_contract";
+
 export interface RouterDecision {
   mode: RouterMode;
+  archetype: RouterArchetype;
+  valuePrimitive: RouterValuePrimitive;
   target: RouterTarget;
   failureMode: RouterFailureMode;
   pattern: RouterPattern;
@@ -101,6 +171,8 @@ export interface CompilePromptResponse {
   model?: string;
   latency_ms?: number;
   route_mode?: RouterDecision["mode"];
+  route_archetype?: RouterDecision["archetype"];
+  route_value_primitive?: RouterDecision["valuePrimitive"];
   route_target?: RouterDecision["target"];
   route_pattern?: RouterDecision["pattern"];
   route_failure_mode?: RouterDecision["failureMode"];
@@ -186,6 +258,8 @@ export interface ContextReceipt {
   model?: string;
   latency_ms?: number;
   route_mode?: RouterDecision["mode"];
+  route_archetype?: RouterDecision["archetype"];
+  route_value_primitive?: RouterDecision["valuePrimitive"];
   route_target?: RouterDecision["target"];
   route_pattern?: RouterDecision["pattern"];
   route_failure_mode?: RouterDecision["failureMode"];

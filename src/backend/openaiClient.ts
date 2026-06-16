@@ -198,6 +198,8 @@ function withRouterMetadata(
   return {
     ...response,
     route_mode: routed.decision.mode,
+    route_archetype: routed.decision.archetype,
+    route_value_primitive: routed.decision.valuePrimitive,
     route_target: routed.decision.target,
     route_pattern: routed.decision.pattern,
     route_failure_mode: routed.decision.failureMode,

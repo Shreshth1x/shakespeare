@@ -382,6 +382,8 @@ function toReceipt(source: CompilePromptResponse | ContextReceipt): ContextRecei
     model: source.model,
     latency_ms: source.latency_ms,
     route_mode: source.route_mode,
+    route_archetype: source.route_archetype,
+    route_value_primitive: source.route_value_primitive,
     route_target: source.route_target,
     route_pattern: source.route_pattern,
     route_failure_mode: source.route_failure_mode,

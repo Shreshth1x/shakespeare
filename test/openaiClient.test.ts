@@ -27,7 +27,11 @@ test("speed mode returns router fallback with metadata when no OpenAI key is con
     assert.equal(result.timed_out, false);
     assert.equal(result.route_pattern, "agent_fix");
     assert.equal(result.route_target, "codex");
-    assert.match(result.optimized_prompt, /Inspect the relevant files/i);
+    assert.equal(result.route_archetype, "coding_implementation");
+    assert.equal(result.route_value_primitive, "acceptance_contract");
+    assert.match(result.optimized_prompt, /inspect the existing product flow and nearby code/i);
+    assert.match(result.optimized_prompt, /acceptance criteria/i);
+    assert.match(result.optimized_prompt, /verify with the closest tests\/checks/i);
     assert(result.context_char_count != null && result.context_char_count > 0);
   } finally {
     restoreEnv("OPENAI_API_KEY", originalKey);
