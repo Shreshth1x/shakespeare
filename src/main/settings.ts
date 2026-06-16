@@ -7,6 +7,7 @@ import type {
   ContextReceipt,
   DashboardState,
   HistoryRecord,
+  IdeContextSnapshot,
   PendingPreview,
   ScreenContextSnapshot
 } from "../shared/types";
@@ -23,6 +24,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   clipboardContextEnabled: false,
   screenContextEnabled: false,
   browserContextEnabled: false,
+  ideContextEnabled: false,
   localHistoryEnabled: false,
   appDenylist: [],
   stats: {
@@ -199,9 +201,11 @@ export function toDashboardState(
   history: HistoryRecord[],
   lastReceipt: ContextReceipt | null,
   browserContext: BrowserContextSnapshot | null,
+  ideContext: IdeContextSnapshot | null,
   screenContext: ScreenContextSnapshot | null,
   screenContextBusy: boolean,
-  browserBridge: { port: number; running: boolean }
+  browserBridge: { port: number; running: boolean },
+  ideBridge: { port: number; running: boolean }
 ): DashboardState {
   return {
     settings,
@@ -212,9 +216,11 @@ export function toDashboardState(
     history,
     lastReceipt,
     browserContext,
+    ideContext,
     screenContext,
     screenContextBusy,
     browserBridge,
+    ideBridge,
     platform: process.platform,
     permissions: {
       accessibility: process.platform === "darwin" ? "unknown" : "not_required",

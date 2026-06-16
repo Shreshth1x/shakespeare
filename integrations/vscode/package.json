@@ -1,0 +1,54 @@
+{
+  "name": "shakespeare-ide-context",
+  "displayName": "Shakespeare IDE Context",
+  "description": "Sends bounded VS Code and Cursor editor context to the local Shakespeare desktop app.",
+  "version": "0.1.0",
+  "publisher": "shakespeare-local",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:shakespeare.refreshContext"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "shakespeare.refreshContext",
+        "title": "Shakespeare: Refresh IDE Context"
+      }
+    ],
+    "configuration": {
+      "title": "Shakespeare",
+      "properties": {
+        "shakespeare.bridgeUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8792/v1/ide-context",
+          "description": "Local Shakespeare IDE context bridge endpoint."
+        },
+        "shakespeare.autoSend": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh local IDE context when the active editor, selection, diagnostics, or saved document changes."
+        },
+        "shakespeare.includeGitDiff": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include a bounded git diff for the active file when available."
+        },
+        "shakespeare.maxVisibleCharacters": {
+          "type": "number",
+          "default": 4000,
+          "minimum": 500,
+          "maximum": 12000,
+          "description": "Maximum visible editor characters sent to the local app before the desktop app applies its own caps."
+        }
+      }
+    }
+  }
+}

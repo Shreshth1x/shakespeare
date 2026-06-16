@@ -357,15 +357,24 @@ textarea:focus {
 }
 
 .setup-row {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
 .pill {
   justify-content: space-between;
+  min-width: 0;
 }
 
 .pill span {
   color: #6f756f;
+  white-space: nowrap;
+}
+
+.pill strong {
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pill.good strong {

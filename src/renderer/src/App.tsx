@@ -179,6 +179,9 @@ export default function App(): JSX.Element {
   const browserContextLabel = state.browserContext
     ? `${state.browserContext.hostname || "browser"} · ${new Date(state.browserContext.updatedAt).toLocaleTimeString()}`
     : "No fresh page";
+  const ideContextLabel = state.ideContext
+    ? `${state.ideContext.editor} · ${state.ideContext.relativeFilePath || state.ideContext.filePath || "active editor"}`
+    : "No editor context";
   const screenContextLabel = state.screenContext
     ? `${state.screenContext.sourceName} · ${state.screenContext.latencyMs} ms`
     : "No capture";
@@ -369,6 +372,11 @@ export default function App(): JSX.Element {
             onChange={(browserContextEnabled) => updateSettings({ browserContextEnabled })}
           />
           <Toggle
+            label="IDE context"
+            checked={state.settings.ideContextEnabled}
+            onChange={(ideContextEnabled) => updateSettings({ ideContextEnabled })}
+          />
+          <Toggle
             label="Local history"
             checked={state.settings.localHistoryEnabled}
             onChange={(localHistoryEnabled) => updateSettings({ localHistoryEnabled })}
@@ -410,6 +418,11 @@ export default function App(): JSX.Element {
             <em>{browserContextLabel}</em>
           </div>
           <div className="browser-context-line">
+            <span>IDE bridge</span>
+            <strong>{state.ideBridge.running ? `:${state.ideBridge.port}` : "offline"}</strong>
+            <em>{ideContextLabel}</em>
+          </div>
+          <div className="browser-context-line">
             <span>Screen OCR</span>
             <strong>{state.screenContextBusy ? "running" : state.screenContext ? "ready" : "empty"}</strong>
             <em>{screenContextLabel}</em>
@@ -442,6 +455,7 @@ export default function App(): JSX.Element {
           value={state.browserBridge.running ? "Bridge on" : "Bridge off"}
           good={state.browserBridge.running}
         />
+        <StatusPill label="IDE" value={state.ideBridge.running ? "Bridge on" : "Bridge off"} good={state.ideBridge.running} />
         <StatusPill label="Platform" value={state.platform} good />
       </section>
     </main>
@@ -545,6 +559,10 @@ function createPreviewApi(): Window["shakespeare"] {
       port: 8791,
       running: true
     },
+    ideBridge: {
+      port: 8792,
+      running: true
+    },
     browserContext: {
       url: "https://chatgpt.com/c/example",
       title: "ChatGPT",
@@ -554,6 +572,20 @@ function createPreviewApi(): Window["shakespeare"] {
       visibleText: "ChatGPT conversation about an auth bug",
       updatedAt: new Date().toISOString(),
       source: "browser_extension"
+    },
+    ideContext: {
+      editor: "Cursor",
+      workspaceName: "shakespeare",
+      workspaceFolders: ["/Users/shreshth/Documents/Shakespeare"],
+      filePath: "/Users/shreshth/Documents/Shakespeare/src/main/index.ts",
+      relativeFilePath: "src/main/index.ts",
+      languageId: "typescript",
+      selectedText: "buildContext(...)",
+      visibleText: "function buildContext(...)",
+      diagnostics: "No diagnostics.",
+      gitDiff: "diff --git a/src/main/index.ts b/src/main/index.ts",
+      updatedAt: new Date().toISOString(),
+      source: "ide_extension"
     },
     screenContext: {
       text: "Error: Auth callback failed in src/auth/session.ts",
@@ -587,6 +619,7 @@ function createPreviewApi(): Window["shakespeare"] {
       clipboardContextEnabled: false,
       screenContextEnabled: false,
       browserContextEnabled: false,
+      ideContextEnabled: false,
       localHistoryEnabled: false,
       appDenylist: ["1Password"],
       stats: {

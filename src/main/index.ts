@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { compilePrompt, checkBackend } from "./backendClient";
 import { createBrowserContextBridge } from "./browserContextBridge";
+import { createIdeContextBridge } from "./ideContextBridge";
 import { createScreenContextService } from "./screenContext";
 import { SettingsStore, toDashboardState } from "./settings";
 import { captureSelectedText, getActiveWindowContext, pasteReplacement } from "./textReplacement";
@@ -27,6 +28,7 @@ let backendHealthy = false;
 let registeredHotkey = false;
 let registeredPreviewHotkey = false;
 const browserBridge = createBrowserContextBridge();
+const ideBridge = createIdeContextBridge();
 const screenContext = createScreenContextService();
 let pendingPreview:
   | (PendingPreview & {
@@ -39,6 +41,7 @@ let pendingPreview:
 app.whenReady().then(async () => {
   store = new SettingsStore();
   await browserBridge.start();
+  await ideBridge.start();
   backendHealthy = await checkBackend(store.get());
   createWindow();
   createTray();
@@ -56,6 +59,8 @@ app.whenReady().then(async () => {
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  void browserBridge.stop();
+  void ideBridge.stop();
 });
 
 function createWindow(): void {
@@ -195,6 +200,7 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
       selection.previousClipboardText,
       settings,
       browserBridge.getLatest(),
+      ideBridge.getLatest(),
       screenContext.getLatest()
     );
     if (isAppDenied(context, settings.appDenylist)) {
@@ -316,6 +322,7 @@ function buildContext(
   previousClipboardText: string,
   settings: AppSettings,
   browserContext = browserBridge.getLatest(),
+  ideContext = ideBridge.getLatest(),
   screenSnapshot = screenContext.getLatest()
 ): PromptContext {
   const base: PromptContext = {
@@ -328,7 +335,16 @@ function buildContext(
     browser_hostname: settings.browserContextEnabled ? browserContext?.hostname : null,
     browser_selection: settings.browserContextEnabled ? browserContext?.selectedText : null,
     browser_focused_text: settings.browserContextEnabled ? browserContext?.focusedText : null,
-    browser_visible_text: settings.browserContextEnabled ? browserContext?.visibleText : null
+    browser_visible_text: settings.browserContextEnabled ? browserContext?.visibleText : null,
+    ide_editor: settings.ideContextEnabled ? ideContext?.editor : null,
+    ide_workspace: settings.ideContextEnabled ? ideContext?.workspaceName : null,
+    ide_file_path: settings.ideContextEnabled ? ideContext?.filePath : null,
+    ide_relative_file_path: settings.ideContextEnabled ? ideContext?.relativeFilePath : null,
+    ide_language_id: settings.ideContextEnabled ? ideContext?.languageId : null,
+    ide_selection: settings.ideContextEnabled ? ideContext?.selectedText : null,
+    ide_visible_text: settings.ideContextEnabled ? ideContext?.visibleText : null,
+    ide_diagnostics: settings.ideContextEnabled ? ideContext?.diagnostics : null,
+    ide_git_diff: settings.ideContextEnabled ? ideContext?.gitDiff : null
   };
   const detectedTarget = detectTargetTool(base);
   return {
@@ -377,11 +393,16 @@ function dashboardState() {
     store.historySnapshot(),
     store.lastReceiptSnapshot(),
     browserBridge.getLatest(),
+    ideBridge.getLatest(),
     screenContext.getLatest(),
     screenContext.isBusy(),
     {
       port: browserBridge.port,
       running: browserBridge.running
+    },
+    {
+      port: ideBridge.port,
+      running: ideBridge.running
     }
   );
 }

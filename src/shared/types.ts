@@ -15,6 +15,15 @@ export interface PromptContext {
   browser_selection?: string | null;
   browser_focused_text?: string | null;
   browser_visible_text?: string | null;
+  ide_editor?: string | null;
+  ide_workspace?: string | null;
+  ide_file_path?: string | null;
+  ide_relative_file_path?: string | null;
+  ide_language_id?: string | null;
+  ide_selection?: string | null;
+  ide_visible_text?: string | null;
+  ide_diagnostics?: string | null;
+  ide_git_diff?: string | null;
 }
 
 export interface CompilePromptRequest {
@@ -54,6 +63,7 @@ export interface AppSettings {
   clipboardContextEnabled: boolean;
   screenContextEnabled: boolean;
   browserContextEnabled: boolean;
+  ideContextEnabled: boolean;
   localHistoryEnabled: boolean;
   appDenylist: string[];
   stats: UsageStats;
@@ -105,6 +115,21 @@ export interface ScreenContextSnapshot {
   warning?: string;
 }
 
+export interface IdeContextSnapshot {
+  editor: string;
+  workspaceName: string;
+  workspaceFolders: string[];
+  filePath: string;
+  relativeFilePath: string;
+  languageId: string;
+  selectedText: string;
+  visibleText: string;
+  diagnostics: string;
+  gitDiff: string;
+  updatedAt: string;
+  source: "ide_extension";
+}
+
 export interface DashboardState {
   settings: AppSettings;
   backendHealthy: boolean;
@@ -119,9 +144,14 @@ export interface DashboardState {
   history: HistoryRecord[];
   lastReceipt: ContextReceipt | null;
   browserContext: BrowserContextSnapshot | null;
+  ideContext: IdeContextSnapshot | null;
   screenContext: ScreenContextSnapshot | null;
   screenContextBusy: boolean;
   browserBridge: {
+    port: number;
+    running: boolean;
+  };
+  ideBridge: {
     port: number;
     running: boolean;
   };

@@ -44,6 +44,7 @@ For local UI work without an OpenAI key, set `SHAKESPEARE_MOCK_MODEL=true` in th
 - Browser extension bridge for ChatGPT, Claude, Gemini, Gmail, Slack, Notion, Linear, and GitHub context.
 - Manual local screen OCR capture that stores only extracted text and uses it only when `Screen context` is enabled.
 - zsh input-buffer integration for rewriting the current terminal prompt in place.
+- VS Code/Cursor extension bridge for active file, selected code, visible code, diagnostics, and git diff context.
 
 ## Browser Context Extension
 
@@ -63,6 +64,25 @@ The extension sends bounded page context to the local desktop app only:
 - Bounded visible page text from the main page area.
 
 The desktop app ignores this data unless `Browser context` is enabled.
+
+## IDE Context Extension
+
+The local VS Code/Cursor extension lives in `integrations/vscode/`.
+
+1. Start the Electron app so the local IDE bridge is listening on `127.0.0.1:8792`.
+2. In VS Code or Cursor, run `Developer: Install Extension from Location...`.
+3. Select `integrations/vscode/`.
+4. In Shakespeare, enable `IDE context` in the Privacy panel.
+
+The extension sends bounded editor context to the local desktop app only:
+
+- Editor and workspace name.
+- Active file path and language.
+- Selected code and visible editor text.
+- Active-file diagnostics.
+- Bounded active-file `git diff`, when available.
+
+The desktop app ignores this data unless `IDE context` is enabled.
 
 ## Terminal / zsh Integration
 

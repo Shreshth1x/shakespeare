@@ -80,3 +80,25 @@ test("local fallback includes browser context when provided", () => {
   assert.match(prompt, /Browser URL/);
   assert.match(prompt, /Important thread text/);
 });
+
+test("local fallback includes IDE context when provided", () => {
+  const prompt = compilePromptLocally({
+    rough_prompt: "fix this diagnostic",
+    mode: "coding_agent",
+    optimization_mode: "speed",
+    context: {
+      ide_editor: "Cursor",
+      ide_workspace: "shakespeare",
+      ide_relative_file_path: "src/main/index.ts",
+      ide_language_id: "typescript",
+      ide_selection: "const context = buildContext();",
+      ide_diagnostics: "Error at 12:7: Cannot find name context.",
+      ide_git_diff: "diff --git a/src/main/index.ts b/src/main/index.ts"
+    }
+  });
+
+  assert.match(prompt, /IDE: Cursor/);
+  assert.match(prompt, /Active file: src\/main\/index.ts/);
+  assert.match(prompt, /Diagnostics: Error/);
+  assert.match(prompt, /Git diff:/);
+});

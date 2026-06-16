@@ -19,7 +19,16 @@ const TARGET_PATTERNS: Array<{ target: string; patterns: RegExp[] }> = [
 ];
 
 export function detectTargetTool(context: PromptContext): string | null {
-  const haystack = [context.active_app, context.window_title, context.browser_hostname, context.browser_title, context.browser_url]
+  const haystack = [
+    context.active_app,
+    context.window_title,
+    context.browser_hostname,
+    context.browser_title,
+    context.browser_url,
+    context.ide_editor,
+    context.ide_workspace,
+    context.ide_file_path
+  ]
     .filter(Boolean)
     .join(" ");
   if (!haystack) return null;

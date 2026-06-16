@@ -27,6 +27,14 @@ test("detectTargetTool infers common AI and coding surfaces", () => {
     }),
     "Claude"
   );
+
+  assert.equal(
+    detectTargetTool({
+      ide_editor: "Visual Studio Code",
+      ide_file_path: "/repo/src/auth.ts"
+    }),
+    "VS Code"
+  );
 });
 
 test("isAppDenied matches configured app or window fragments", () => {

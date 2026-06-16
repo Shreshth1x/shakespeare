@@ -56,7 +56,7 @@ export function compactContext(context: PromptContext | undefined): PromptContex
   const compacted: PromptContext = {};
   for (const [key, value] of Object.entries(context) as Array<[keyof PromptContext, string | null | undefined]>) {
     if (typeof value === "string" && value.trim().length > 0) {
-      compacted[key] = truncate(value.trim(), key === "visible_text" ? 2200 : 500);
+      compacted[key] = truncate(value.trim(), contextMaxLength(key));
     }
   }
   return compacted;
@@ -104,6 +104,16 @@ export function compilePromptLocally(request: CompilePromptRequest): string {
     context.browser_selection ? `Browser selection: ${context.browser_selection}` : null,
     context.browser_focused_text ? `Browser focused text: ${context.browser_focused_text}` : null,
     context.browser_visible_text ? `Browser context: ${context.browser_visible_text}` : null,
+    context.ide_editor ? `IDE: ${context.ide_editor}.` : null,
+    context.ide_workspace ? `Workspace: ${context.ide_workspace}.` : null,
+    context.ide_relative_file_path || context.ide_file_path
+      ? `Active file: ${context.ide_relative_file_path || context.ide_file_path}.`
+      : null,
+    context.ide_language_id ? `Language: ${context.ide_language_id}.` : null,
+    context.ide_selection ? `Selected code: ${context.ide_selection}` : null,
+    context.ide_visible_text ? `Visible code: ${context.ide_visible_text}` : null,
+    context.ide_diagnostics ? `Diagnostics: ${context.ide_diagnostics}` : null,
+    context.ide_git_diff ? `Git diff: ${context.ide_git_diff}` : null,
     context.visible_text ? `Observed context: ${context.visible_text}` : null
   ].filter(Boolean);
 
@@ -141,6 +151,29 @@ export function compilePromptLocally(request: CompilePromptRequest): string {
 function truncate(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength - 1)}…`;
+}
+
+function contextMaxLength(key: keyof PromptContext): number {
+  switch (key) {
+    case "visible_text":
+      return 2200;
+    case "browser_visible_text":
+      return 2200;
+    case "browser_selection":
+    case "browser_focused_text":
+    case "ide_selection":
+      return 1800;
+    case "ide_visible_text":
+      return 2200;
+    case "ide_diagnostics":
+      return 1400;
+    case "ide_git_diff":
+      return 2600;
+    case "ide_file_path":
+      return 700;
+    default:
+      return 500;
+  }
 }
 
 function isPromptMode(value: unknown): value is PromptMode {
