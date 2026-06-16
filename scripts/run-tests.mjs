@@ -40,7 +40,7 @@ function findTestFiles(dir) {
       files.push(...findTestFiles(path));
       continue;
     }
-    if (entry.isFile() && entry.name.endsWith(".test.ts")) {
+    if (entry.isFile() && (entry.name.endsWith(".test.ts") || entry.name.endsWith(".test.mjs"))) {
       files.push(path);
     }
   }

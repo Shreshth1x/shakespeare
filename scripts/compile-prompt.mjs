@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
 const DEFAULT_BACKEND_URL = "http://127.0.0.1:8787";
 
 export function parseArgs(argv) {
@@ -134,6 +137,25 @@ function trimSlash(value) {
   return value.replace(/\/+$/, "");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+export function isMainModule(moduleUrl = import.meta.url, argvPath = process.argv[1], platform = process.platform) {
+  if (!argvPath) return false;
+
+  const invokedUrl = invokedPathToFileUrl(argvPath, platform);
+  if (platform === "win32") {
+    return moduleUrl.toLowerCase() === invokedUrl.toLowerCase();
+  }
+
+  return moduleUrl === invokedUrl;
+}
+
+function invokedPathToFileUrl(argvPath, platform) {
+  if (platform === "win32" && /^[a-zA-Z]:[\\/]/.test(argvPath)) {
+    return new URL(`file:///${argvPath.replace(/\\/g, "/")}`).href;
+  }
+
+  return pathToFileURL(resolve(argvPath)).href;
+}
+
+if (isMainModule()) {
   await main();
 }
