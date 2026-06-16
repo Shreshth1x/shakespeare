@@ -1,0 +1,58 @@
+{
+  "name": "shakespeare",
+  "version": "0.1.0",
+  "description": "Cross-platform context-aware prompt compiler for macOS and Windows.",
+  "main": "dist/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n backend,app \"npm run dev:backend\" \"npm run dev:app\"",
+    "dev:app": "electron-vite dev",
+    "dev:backend": "tsx src/backend/server.ts",
+    "build": "npm run typecheck && electron-vite build && npm run build:backend",
+    "build:backend": "tsc -p tsconfig.backend.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx test/*.test.ts",
+    "package": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "com.shakespeare.promptcompiler",
+    "productName": "Shakespeare",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.12",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^8.2.2",
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
+    "vite": "^5.3.4"
+  }
+}
