@@ -27,6 +27,32 @@ test("router selects coding-agent fix pattern for Codex prompts", () => {
   assert.equal(decision.reasoningEffort, "none");
 });
 
+test("router turns Mobbin UI redesign asks into concrete reference-driven redesign prompts", () => {
+  const routed = buildRoutedPrompt({
+    rough_prompt: "use the mobbin mcp to redesign the electron app UI to be like whisper flow style of clean typography and colors",
+    mode: "coding_agent",
+    optimization_mode: "speed",
+    context: {
+      active_app: "Codex",
+      window_title: "Codex",
+      selected_text:
+        "use the mobbin mcp to redesign the electron app UI to be like whisper flow style of clean typography and colors"
+    }
+  });
+
+  assert.equal(routed.decision.target, "codex");
+  assert.equal(routed.decision.mode, "coding_agent");
+  assert.equal(routed.decision.pattern, "ui_redesign");
+  assert.equal(routed.decision.failureMode, "missing_reference_workflow");
+  assert.equal(routed.decision.outputBudgetTokens, 360);
+  assert.match(routed.fallback, /Use mobbin mcp first/i);
+  assert.match(routed.fallback, /Extract concrete visual decisions/i);
+  assert.match(routed.fallback, /typography scale/i);
+  assert.match(routed.fallback, /Electron renderer/i);
+  assert.match(routed.fallback, /screenshot|visual check/i);
+  assert.doesNotMatch(routed.fallback, /^Goal:/);
+});
+
 test("router lets Gmail and Slack override the default coding mode", () => {
   const decision = routePrompt({
     rough_prompt: "reply to this and keep it short",

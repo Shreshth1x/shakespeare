@@ -1,21 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   Activity,
   Bolt,
   Check,
-  Clipboard,
+  CheckCircle2,
   Eye,
   Gauge,
   History,
   Keyboard,
+  MousePointer2,
   Plus,
   Play,
   RefreshCw,
   RotateCw,
   Settings,
   Shield,
+  Sparkles,
   Trash2,
   Users,
+  WandSparkles,
   X
 } from "lucide-react";
 import type {
@@ -80,6 +83,7 @@ export default function App(): JSX.Element {
   const [customInstructionDraft, setCustomInstructionDraft] = useState("");
   const [teamPolicyDraft, setTeamPolicyDraft] = useState(JSON.stringify(TEAM_POLICY_TEMPLATE, null, 2));
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -128,8 +132,14 @@ export default function App(): JSX.Element {
 
   async function updateSettings(patch: Partial<AppSettings>): Promise<void> {
     setError(null);
-    const next = await api.updateSettings(patch);
-    setState(next);
+    setNotice(null);
+    try {
+      const next = await api.updateSettings(patch);
+      setState(next);
+      setNotice("Settings saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save settings.");
+    }
   }
 
   async function runSample(): Promise<void> {
@@ -141,6 +151,7 @@ export default function App(): JSX.Element {
       setSampleResult(result);
       const next = await api.getState();
       setState(next);
+      setNotice("Sample prompt compiled.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Rewrite failed.");
     } finally {
@@ -154,6 +165,7 @@ export default function App(): JSX.Element {
     try {
       const result = await api.rewriteSelection();
       if (!result.ok) setError(result.error);
+      if (result.ok) setNotice("Rewrite sent. If text was selected, it has been replaced.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Rewrite failed.");
     } finally {
@@ -172,6 +184,7 @@ export default function App(): JSX.Element {
             ? await api.cancelPreview()
             : await api.regeneratePreview();
       if (!result.ok) setError(result.error);
+      if (result.ok) setNotice(action === "accept" ? "Preview accepted." : action === "cancel" ? "Preview canceled." : "Preview regenerated.");
       const next = await api.getState();
       setState(next);
     } catch (err) {
@@ -332,29 +345,77 @@ export default function App(): JSX.Element {
 
   return (
     <main className="shell">
-      <section className="mast">
+      <aside className="app-rail">
+        <div className="brand-mark">
+          <Sparkles size={19} />
+        </div>
         <div>
           <p className="eyebrow">Shakespeare</p>
-          <h1>Prompt rewrite is {enabled ? "ready" : "waiting"}</h1>
+          <strong>Flow prompt layer</strong>
         </div>
-        <div className={`status ${enabled ? "ready" : "waiting"}`}>
-          <span />
-          {enabled ? "Enabled" : "Check setup"}
+        <nav aria-label="Dashboard sections">
+          <a href="#rewrite">Rewrite</a>
+          <a href="#settings">Controls</a>
+          <a href="#context">Context</a>
+          <a href="#team">Modes</a>
+        </nav>
+        <div className="rail-status">
+          <span className={enabled ? "ready-dot" : "waiting-dot"} />
+          <strong>{enabled ? "Ready" : "Setup needed"}</strong>
+          <em>{state.platform}</em>
         </div>
-      </section>
+      </aside>
 
-      <section className="hotkey-band">
-        <div>
+      <section className="workspace">
+        <section className="mast">
+          <div>
+            <p className="eyebrow">Prompt compiler</p>
+            <h1>{enabled ? "Ready to rewrite." : "Connect the missing pieces."}</h1>
+            <p className="mast-copy">Select a rough prompt, press your hotkey, and Shakespeare replaces it with a cleaner instruction.</p>
+          </div>
+          <div className={`status ${enabled ? "ready" : "waiting"}`}>
+            <span />
+            {enabled ? "Enabled" : "Check setup"}
+          </div>
+        </section>
+
+      {notice || error ? (
+        <section className={`notice ${error ? "error" : ""}`} role="status">
+          {error ? <X size={16} /> : <CheckCircle2 size={16} />}
+          {error ?? notice}
+        </section>
+      ) : null}
+
+      <section className="hotkey-band" id="rewrite">
+        <div className="command-copy">
           <p className="label">Hotkey</p>
           <div className="hotkey">
             <Keyboard size={22} />
-            <strong>{state.settings.hotkey}</strong>
+            <strong>{formatAccelerator(state.settings.hotkey)}</strong>
           </div>
+          <p>Select the text you want rewritten first. Preview mode is safest while testing.</p>
         </div>
-        <button className="primary" onClick={rewriteSelection} disabled={busy}>
-          <Clipboard size={18} />
-          Rewrite selection
-        </button>
+        <div className="wave-meter" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="command-actions">
+          <button className="primary" onClick={rewriteSelection} disabled={busy}>
+            <WandSparkles size={18} />
+            Rewrite selection
+          </button>
+          <button
+            className="secondary"
+            onClick={() => void updateSettings({ previewEnabled: !state.settings.previewEnabled })}
+            disabled={isLocked("previewEnabled")}
+          >
+            <Eye size={17} />
+            {state.settings.previewEnabled ? "Preview on" : "Preview off"}
+          </button>
+        </div>
       </section>
 
       <section className="controls-grid">
@@ -477,20 +538,22 @@ export default function App(): JSX.Element {
         {error ? <p className="error">{error}</p> : null}
       </section>
 
-      <section className="settings-grid">
+      <section className="settings-grid" id="settings">
         <div className="panel">
           <div className="panel-title">
             <Keyboard size={18} />
             Controls
           </div>
-          <TextSetting
+          <HotkeySetting
             label="Rewrite hotkey"
             value={state.settings.hotkey}
+            registered={state.registeredHotkey}
             onSave={(hotkey) => updateSettings({ hotkey })}
           />
-          <TextSetting
+          <HotkeySetting
             label="Accept preview hotkey"
             value={state.settings.previewHotkey}
+            registered={state.registeredPreviewHotkey}
             onSave={(previewHotkey) => updateSettings({ previewHotkey })}
           />
           <TextSetting
@@ -559,7 +622,7 @@ export default function App(): JSX.Element {
         </div>
       </section>
 
-      <section className="settings-grid">
+      <section className="settings-grid" id="team">
         <div className="panel">
           <div className="panel-title">
             <Users size={18} />
@@ -668,7 +731,7 @@ export default function App(): JSX.Element {
           </button>
         </div>
 
-        <div className="panel">
+        <div className="panel" id="context">
           <div className="panel-title">
             <History size={18} />
             Context receipt
@@ -720,6 +783,7 @@ export default function App(): JSX.Element {
         <StatusPill label="IDE" value={state.ideBridge.running ? "Bridge on" : "Bridge off"} good={state.ideBridge.running} />
         <StatusPill label="Platform" value={state.platform} good />
       </section>
+      </section>
     </main>
   );
 }
@@ -753,6 +817,75 @@ function Toggle({
   );
 }
 
+function HotkeySetting({
+  label,
+  value,
+  registered,
+  onSave
+}: {
+  label: string;
+  value: string;
+  registered: boolean;
+  onSave: (value: string) => void | Promise<void>;
+}): JSX.Element {
+  const [draft, setDraft] = useState(value);
+  const [recording, setRecording] = useState(false);
+  const [hint, setHint] = useState("Click record, then press a shortcut.");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (recording) {
+      inputRef.current?.focus();
+      setHint("Press the keys together. Esc cancels.");
+    }
+  }, [recording]);
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    if (!recording) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.key === "Escape") {
+      setRecording(false);
+      setHint("Canceled.");
+      return;
+    }
+
+    const accelerator = acceleratorFromEvent(event);
+    if (!accelerator) {
+      setHint("Use at least one modifier plus a normal key.");
+      return;
+    }
+
+    setDraft(accelerator);
+    setRecording(false);
+    setHint("Ready to save.");
+  }
+
+  return (
+    <label className={`text-setting hotkey-setting ${recording ? "recording" : ""}`}>
+      <span>{label}</span>
+      <div>
+        <input ref={inputRef} value={draft} readOnly onKeyDown={handleKeyDown} aria-label={label} />
+        <button className="mini" type="button" onClick={() => setRecording(true)}>
+          <MousePointer2 size={14} />
+          Record
+        </button>
+        <button className="mini strong" type="button" onClick={() => void onSave(draft.trim())} disabled={!draft.trim() || draft === value}>
+          Save
+        </button>
+      </div>
+      <em className={registered ? "setting-hint good" : "setting-hint bad"}>
+        {recording ? hint : registered ? "Registered" : "Not registered"}
+      </em>
+    </label>
+  );
+}
+
 function TextSetting({
   label,
   value,
@@ -773,12 +906,54 @@ function TextSetting({
       <span>{label}</span>
       <div>
         <input value={draft} onChange={(event) => setDraft(event.target.value)} />
-        <button className="mini" onClick={() => void onSave(draft.trim())}>
+        <button className="mini strong" onClick={() => void onSave(draft.trim())} disabled={!draft.trim() || draft.trim() === value}>
           Save
         </button>
       </div>
     </label>
   );
+}
+
+function acceleratorFromEvent(event: KeyboardEvent<HTMLInputElement>): string | null {
+  const key = normalizeAcceleratorKey(event.key);
+  if (!key) return null;
+
+  const modifiers: string[] = [];
+  if (event.metaKey || event.ctrlKey) modifiers.push("CommandOrControl");
+  if (event.altKey) modifiers.push("Alt");
+  if (event.shiftKey) modifiers.push("Shift");
+  if (modifiers.length === 0) return null;
+
+  return [...modifiers, key].join("+");
+}
+
+function normalizeAcceleratorKey(key: string): string | null {
+  const modifierKeys = new Set(["Alt", "Control", "Meta", "Shift", "Fn", "CapsLock"]);
+  if (modifierKeys.has(key)) return null;
+
+  const mapped: Record<string, string> = {
+    " ": "Space",
+    ArrowDown: "Down",
+    ArrowLeft: "Left",
+    ArrowRight: "Right",
+    ArrowUp: "Up",
+    Backspace: "Backspace",
+    Delete: "Delete",
+    Enter: "Enter",
+    Escape: "Escape",
+    Tab: "Tab"
+  };
+  if (mapped[key]) return mapped[key];
+
+  if (/^F\d{1,2}$/.test(key)) return key;
+
+  if (key.length === 1) {
+    const upper = key.toUpperCase();
+    if (/^[A-Z0-9]$/.test(upper)) return upper;
+    if ([".", ",", "/", ";", "'", "-", "="].includes(key)) return key;
+  }
+
+  return null;
 }
 
 function Receipt({ receipt }: { receipt: ContextReceipt | null }): JSX.Element {
@@ -809,6 +984,15 @@ function StatusPill({ label, value, good }: { label: string; value: string; good
       <strong>{value}</strong>
     </div>
   );
+}
+
+function formatAccelerator(value: string): string {
+  return value
+    .replaceAll("CommandOrControl", "Cmd/Ctrl")
+    .replaceAll("Command", "Cmd")
+    .replaceAll("Control", "Ctrl")
+    .split("+")
+    .join(" + ");
 }
 
 function receiptFromResponse(response: CompilePromptResponse): ContextReceipt {

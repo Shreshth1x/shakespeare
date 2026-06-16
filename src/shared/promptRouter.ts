@@ -14,7 +14,7 @@ export const SPEED_COMPILER_INSTRUCTIONS = [
   "Rewrite the rough request into the smallest prompt likely to succeed for the given mode and target.",
   "Preserve intent. Do not add unsupported facts, filenames, errors, preferences, or constraints.",
   "Use context only when clearly relevant. Treat context as observed, not guaranteed.",
-  "Apply the provided pattern. Fill only missing pieces that materially improve success: goal, context, constraints, output shape, verification, or uncertainty handling.",
+  "Apply the provided pattern. Fill only missing pieces that materially improve success: required tools, reference gathering, concrete decisions, deliverables, constraints, output shape, verification, or uncertainty handling.",
   "Speed rules: be concise, no examples unless provided, no preamble, no explanation, no markdown fence.",
   "Return only the rewritten prompt."
 ].join("\n");
@@ -50,6 +50,10 @@ const DEBUGGING_RE =
   /\b(debug|error|stack trace|exception|traceback|failing|failed|failure|fail|bug|crash|crashing|flaky|broken|root cause|timeout|doesn't work|does not work|not work)\b/i;
 const CODING_RE = /\b(fix|implement|refactor|test|build|ship|pr|repo|code|component|route|api|database|schema|migration)\b/i;
 const CODING_ACTION_RE = /\b(fix|implement|refactor|test|build|ship)\b/i;
+const UI_SURFACE_RE = /\b(ui|ux|interface|screens?|dashboard|electron app|frontend|renderer|settings|onboarding|component|layout)\b/i;
+const UI_DESIGN_ACTION_RE =
+  /\b(redesign|restyle|polish|visual design|typography|colors?|palette|spacing|cleaner|improve|benchmark|reference|inspiration)\b/i;
+const REFERENCE_TOOL_RE = /\b(mobbin|figma|mcp|reference|inspiration|screens?|benchmark|examples?)\b/i;
 const RESEARCH_RE = /\b(research|compare|best|latest|find|source|market|competitor|pricing|deep dive|investigate)\b/i;
 const EXTRACTION_RE = /\b(extract|convert|parse|format as json|json|csv|schema|summarize into|format (this )?(as )?a? ?table|into a table)\b/i;
 const REPLY_RE = /\b(reply|draft|email|message|respond|make this sound)\b/i;
@@ -83,8 +87,8 @@ export function buildRoutedPrompt(request: CompilePromptRequest): RoutedPrompt {
 export function routePrompt(request: CompilePromptRequest): RouterDecision {
   const target = detectRouterTarget(request.context);
   const mode = detectRouterMode(request, target);
-  const pattern = selectPattern(mode);
   const failureMode = detectFailureMode(request, mode, target);
+  const pattern = selectPattern(request, mode, failureMode);
   const contextBudgetChars = contextBudgetFor(request.optimization_mode);
   const outputBudgetTokens = outputBudgetFor(request.optimization_mode, pattern);
   const reasoningEffort = reasoningEffortFor(request.optimization_mode);
@@ -157,6 +161,15 @@ export function buildRouterFallback(request: CompilePromptRequest, decision: Rou
   }
 
   switch (decision.pattern) {
+    case "ui_redesign":
+      return joinLines([
+        `Redesign task: ${request.rough_prompt}`,
+        compactContext ? `Observed context: ${compactContext}` : null,
+        buildReferenceWorkflowLine(request.rough_prompt),
+        "Extract concrete visual decisions before editing: typography scale, spacing rhythm, color palette, component density, control styling, and empty-state/preview behavior.",
+        "Then inspect the current Electron renderer, components, and styles. Implement a scoped redesign that preserves existing functionality.",
+        "Deliverables: updated UI code/styles, a short design-decision summary with references used, and verification with relevant tests plus a local screenshot or visual check when possible."
+      ]);
     case "agent_fix":
       return joinLines([
         `Goal: ${request.rough_prompt}`,
@@ -301,6 +314,7 @@ function detectFailureMode(request: CompilePromptRequest, mode: RouterMode, targ
   const rough = request.rough_prompt.trim();
   const hasContext = contextHasObservedText(request.context);
 
+  if (isUiRedesignRequest(text) && REFERENCE_TOOL_RE.test(text)) return "missing_reference_workflow";
   if (CURRENT_FACT_RE.test(text)) return "hallucination_risk";
   if (DEICTIC_RE.test(rough) && hasContext) return "missing_context";
   if ((mode === "extraction" || EXTRACTION_RE.test(text)) && !FORMAT_RE.test(text)) return "parseability";
@@ -318,7 +332,15 @@ function detectFailureMode(request: CompilePromptRequest, mode: RouterMode, targ
   return "wrong_output_shape";
 }
 
-function selectPattern(mode: RouterMode): RouterPattern {
+function selectPattern(request: CompilePromptRequest, mode: RouterMode, failureMode: RouterFailureMode): RouterPattern {
+  const text = routingHaystack(request);
+  if ((mode === "coding_agent" || mode === "general") && isUiRedesignRequest(text)) {
+    return "ui_redesign";
+  }
+  if (failureMode === "missing_reference_workflow" && isUiRedesignRequest(text)) {
+    return "ui_redesign";
+  }
+
   switch (mode) {
     case "coding_agent":
       return "agent_fix";
@@ -384,7 +406,7 @@ function contextBudgetFor(mode: OptimizationMode): number {
 
 function outputBudgetFor(mode: OptimizationMode, pattern: RouterPattern): number {
   if (mode === "speed") {
-    return pattern === "research_compare" || pattern === "decision_matrix" ? 320 : 260;
+    return pattern === "research_compare" || pattern === "decision_matrix" || pattern === "ui_redesign" ? 360 : 260;
   }
   if (mode === "quality") return 650;
   return 900;
@@ -415,4 +437,24 @@ function truncate(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   if (maxLength <= 3) return value.slice(0, maxLength);
   return `${value.slice(0, maxLength - 3)}...`;
+}
+
+function buildReferenceWorkflowLine(roughPrompt: string): string {
+  const tool = detectReferenceToolName(roughPrompt);
+  if (tool) {
+    return `Use ${tool} first as the reference source: search for relevant screens or sections, inspect the returned visuals/design context, and extract reusable patterns without copying proprietary UI exactly.`;
+  }
+  return "Gather 3-5 relevant product UI references first, inspect them for reusable patterns, and avoid copying proprietary UI exactly.";
+}
+
+function detectReferenceToolName(roughPrompt: string): string | null {
+  if (/\bmobbin\b/i.test(roughPrompt)) return roughPrompt.match(/\bmobbin\s+mcp\b/i)?.[0] ?? "Mobbin";
+  if (/\bfigma\b/i.test(roughPrompt)) return "Figma";
+  if (/\bmcp\b/i.test(roughPrompt)) return "the requested MCP tool";
+  return null;
+}
+
+function isUiRedesignRequest(text: string): boolean {
+  if (/\bscreen\s+ocr\b/i.test(text)) return false;
+  return UI_SURFACE_RE.test(text) && UI_DESIGN_ACTION_RE.test(text);
 }

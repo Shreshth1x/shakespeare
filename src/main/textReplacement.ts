@@ -1,5 +1,6 @@
 import { clipboard } from "electron";
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -11,9 +12,17 @@ export interface SelectionCapture {
 
 export async function captureSelectedText(): Promise<SelectionCapture> {
   const previousClipboardText = clipboard.readText();
+  const emptySelectionSentinel = `__SHAKESPEARE_EMPTY_SELECTION_${randomUUID()}__`;
+  clipboard.writeText(emptySelectionSentinel);
+  await wait(25);
   await sendShortcut("copy");
   await wait(140);
-  const selectedText = clipboard.readText().trim();
+  const copiedText = clipboard.readText();
+  const selectedText = copiedText === emptySelectionSentinel ? "" : copiedText.trim();
+
+  if (!selectedText) {
+    clipboard.writeText(previousClipboardText);
+  }
 
   return {
     selectedText,

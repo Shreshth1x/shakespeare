@@ -35,12 +35,14 @@ export type RouterFailureMode =
   | "hallucination_risk"
   | "agent_overbuild"
   | "agent_underbuild"
+  | "missing_reference_workflow"
   | "needs_decomposition"
   | "tone_mismatch"
   | "parseability";
 
 export type RouterPattern =
   | "agent_fix"
+  | "ui_redesign"
   | "debug_root_cause"
   | "research_compare"
   | "extract_schema"

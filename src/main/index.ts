@@ -67,13 +67,13 @@ app.on("will-quit", () => {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 760,
-    height: 560,
-    minWidth: 680,
-    minHeight: 520,
+    width: 1080,
+    height: 760,
+    minWidth: 860,
+    minHeight: 640,
     show: false,
     title: "Shakespeare",
-    backgroundColor: "#f8f5ef",
+    backgroundColor: "#f6f8f4",
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,

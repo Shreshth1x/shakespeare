@@ -51,6 +51,7 @@ function buildFixtures(): RouterFixture[] {
   return [
     ...makeCodingFixtures(),
     ...makeDebuggingFixtures(),
+    ...makeDesignReferenceFixtures(),
     ...makeResearchFixtures(),
     ...makeExtractionFixtures(),
     ...makeReplyFixtures(),
@@ -120,6 +121,27 @@ function makeDebuggingFixtures(): RouterFixture[] {
       visible_text: "Error: Cannot read properties of undefined"
     },
     expectedPattern: "debug_root_cause"
+  }));
+}
+
+function makeDesignReferenceFixtures(): RouterFixture[] {
+  const prompts = [
+    "use the mobbin mcp to redesign the electron app UI to be like whisper flow style of clean typography and colors",
+    "use Mobbin references to restyle the settings dashboard",
+    "redesign this frontend using Mobbin screens for clean SaaS typography",
+    "use Figma as inspiration and polish the renderer UI",
+    "use the design MCP to benchmark settings screens and update the app",
+    "redesign the dashboard with better spacing typography and colors",
+    "restyle this Electron app based on product UI references",
+    "use Mobbin to find command palette examples and improve this screen",
+    "polish the UI layout with reference screenshots before editing",
+    "redesign the onboarding screen with cleaner controls and visual hierarchy"
+  ];
+  return prompts.map((roughPrompt, index) => ({
+    category: "design-reference",
+    roughPrompt,
+    context: index % 2 === 0 ? { active_app: "Codex", window_title: "repo" } : { ide_editor: "Cursor", ide_workspace: "app" },
+    expectedPattern: "ui_redesign"
   }));
 }
 
