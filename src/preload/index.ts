@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppSettings, CompilePromptResponse, DashboardState } from "../shared/types";
+import type { AppSettings, CompilePromptResponse, DashboardState, ScreenContextSnapshot } from "../shared/types";
 
 const api = {
   getState: (): Promise<DashboardState> => ipcRenderer.invoke("state:get"),
@@ -10,6 +10,9 @@ const api = {
   acceptPreview: (): Promise<{ ok: true } | { ok: false; error: string }> => ipcRenderer.invoke("preview:accept"),
   cancelPreview: (): Promise<{ ok: true }> => ipcRenderer.invoke("preview:cancel"),
   regeneratePreview: (): Promise<{ ok: true } | { ok: false; error: string }> => ipcRenderer.invoke("preview:regenerate"),
+  captureScreenContext: (): Promise<{ ok: true; snapshot: ScreenContextSnapshot } | { ok: false; error: string }> =>
+    ipcRenderer.invoke("screen:capture"),
+  clearScreenContext: (): Promise<{ ok: true }> => ipcRenderer.invoke("screen:clear"),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke("shell:openExternal", url),
   onStateChanged: (callback: (state: DashboardState) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, state: DashboardState): void => callback(state);

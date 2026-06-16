@@ -42,6 +42,7 @@ For local UI work without an OpenAI key, set `SHAKESPEARE_MOCK_MODEL=true` in th
 - Context receipt showing model, latency, context sources, and warnings.
 - Local-only prompt history when explicitly enabled.
 - Browser extension bridge for ChatGPT, Claude, Gemini, Gmail, Slack, Notion, Linear, and GitHub context.
+- Manual local screen OCR capture that stores only extracted text and uses it only when `Screen context` is enabled.
 
 ## Browser Context Extension
 
@@ -80,4 +81,5 @@ PORT=8787
 npm run typecheck
 npm test
 npm run build
+npm run package
 ```

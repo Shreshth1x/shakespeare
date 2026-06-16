@@ -97,6 +97,14 @@ export interface BrowserContextSnapshot {
   source: "browser_extension";
 }
 
+export interface ScreenContextSnapshot {
+  text: string;
+  sourceName: string;
+  capturedAt: string;
+  latencyMs: number;
+  warning?: string;
+}
+
 export interface DashboardState {
   settings: AppSettings;
   backendHealthy: boolean;
@@ -111,6 +119,8 @@ export interface DashboardState {
   history: HistoryRecord[];
   lastReceipt: ContextReceipt | null;
   browserContext: BrowserContextSnapshot | null;
+  screenContext: ScreenContextSnapshot | null;
+  screenContextBusy: boolean;
   browserBridge: {
     port: number;
     running: boolean;

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { compilePrompt, checkBackend } from "./backendClient";
 import { createBrowserContextBridge } from "./browserContextBridge";
+import { createScreenContextService } from "./screenContext";
 import { SettingsStore, toDashboardState } from "./settings";
 import { captureSelectedText, getActiveWindowContext, pasteReplacement } from "./textReplacement";
 import { detectTargetTool, isAppDenied } from "../shared/appDetection";
@@ -26,6 +27,7 @@ let backendHealthy = false;
 let registeredHotkey = false;
 let registeredPreviewHotkey = false;
 const browserBridge = createBrowserContextBridge();
+const screenContext = createScreenContextService();
 let pendingPreview:
   | (PendingPreview & {
       previousClipboardText: string;
@@ -153,6 +155,23 @@ function registerIpc(): void {
   ipcMain.handle("preview:accept", async () => acceptPreview());
   ipcMain.handle("preview:cancel", async () => cancelPreview());
   ipcMain.handle("preview:regenerate", async () => regeneratePreview());
+  ipcMain.handle("screen:capture", async () => {
+    try {
+      const snapshot = await screenContext.capture();
+      pushState();
+      return { ok: true, snapshot };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Screen capture failed.";
+      notify("Screen context failed", message);
+      pushState();
+      return { ok: false, error: message };
+    }
+  });
+  ipcMain.handle("screen:clear", async () => {
+    screenContext.clear();
+    pushState();
+    return { ok: true };
+  });
 
   ipcMain.handle("shell:openExternal", async (_event, url: string) => {
     await shell.openExternal(url);
@@ -175,7 +194,8 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
       selection.selectedText,
       selection.previousClipboardText,
       settings,
-      browserBridge.getLatest()
+      browserBridge.getLatest(),
+      screenContext.getLatest()
     );
     if (isAppDenied(context, settings.appDenylist)) {
       throw new Error("This app or window is on your denylist.");
@@ -295,11 +315,13 @@ function buildContext(
   selectedText: string,
   previousClipboardText: string,
   settings: AppSettings,
-  browserContext = browserBridge.getLatest()
+  browserContext = browserBridge.getLatest(),
+  screenSnapshot = screenContext.getLatest()
 ): PromptContext {
   const base: PromptContext = {
     ...windowContext,
     selected_text: selectedText,
+    visible_text: settings.screenContextEnabled ? screenSnapshot?.text : null,
     clipboard_text: settings.clipboardContextEnabled ? previousClipboardText : null,
     browser_url: settings.browserContextEnabled ? browserContext?.url : null,
     browser_title: settings.browserContextEnabled ? browserContext?.title : null,
@@ -355,6 +377,8 @@ function dashboardState() {
     store.historySnapshot(),
     store.lastReceiptSnapshot(),
     browserBridge.getLatest(),
+    screenContext.getLatest(),
+    screenContext.isBusy(),
     {
       port: browserBridge.port,
       running: browserBridge.running

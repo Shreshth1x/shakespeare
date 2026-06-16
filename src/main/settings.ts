@@ -1,7 +1,15 @@
 import { app } from "electron";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { AppSettings, BrowserContextSnapshot, ContextReceipt, DashboardState, HistoryRecord, PendingPreview } from "../shared/types";
+import type {
+  AppSettings,
+  BrowserContextSnapshot,
+  ContextReceipt,
+  DashboardState,
+  HistoryRecord,
+  PendingPreview,
+  ScreenContextSnapshot
+} from "../shared/types";
 
 const DEFAULT_SETTINGS: AppSettings = {
   hotkey: "CommandOrControl+Shift+P",
@@ -191,6 +199,8 @@ export function toDashboardState(
   history: HistoryRecord[],
   lastReceipt: ContextReceipt | null,
   browserContext: BrowserContextSnapshot | null,
+  screenContext: ScreenContextSnapshot | null,
+  screenContextBusy: boolean,
   browserBridge: { port: number; running: boolean }
 ): DashboardState {
   return {
@@ -202,6 +212,8 @@ export function toDashboardState(
     history,
     lastReceipt,
     browserContext,
+    screenContext,
+    screenContextBusy,
     browserBridge,
     platform: process.platform,
     permissions: {

@@ -153,11 +153,35 @@ export default function App(): JSX.Element {
     });
   }
 
+  async function captureScreenContext(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.captureScreenContext();
+      if (!result.ok) setError(result.error);
+      const next = await api.getState();
+      setState(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Screen capture failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearScreenContext(): Promise<void> {
+    await api.clearScreenContext();
+    const next = await api.getState();
+    setState(next);
+  }
+
   const enabled = state.backendHealthy && state.registeredHotkey;
   const receipt = sampleResult ? receiptFromResponse(sampleResult) : state.lastReceipt;
   const browserContextLabel = state.browserContext
     ? `${state.browserContext.hostname || "browser"} · ${new Date(state.browserContext.updatedAt).toLocaleTimeString()}`
     : "No fresh page";
+  const screenContextLabel = state.screenContext
+    ? `${state.screenContext.sourceName} · ${state.screenContext.latencyMs} ms`
+    : "No capture";
 
   return (
     <main className="shell">
@@ -330,6 +354,15 @@ export default function App(): JSX.Element {
             checked={state.settings.screenContextEnabled}
             onChange={(screenContextEnabled) => updateSettings({ screenContextEnabled })}
           />
+          <div className="button-row context-buttons">
+            <button className="secondary" onClick={captureScreenContext} disabled={busy || state.screenContextBusy}>
+              {state.screenContextBusy ? <RefreshCw className="spin" size={16} /> : <Eye size={16} />}
+              Capture screen
+            </button>
+            <button className="ghost" onClick={clearScreenContext} disabled={!state.screenContext}>
+              Clear
+            </button>
+          </div>
           <Toggle
             label="Browser context"
             checked={state.settings.browserContextEnabled}
@@ -375,6 +408,11 @@ export default function App(): JSX.Element {
             <span>Browser bridge</span>
             <strong>{state.browserBridge.running ? `:${state.browserBridge.port}` : "offline"}</strong>
             <em>{browserContextLabel}</em>
+          </div>
+          <div className="browser-context-line">
+            <span>Screen OCR</span>
+            <strong>{state.screenContextBusy ? "running" : state.screenContext ? "ready" : "empty"}</strong>
+            <em>{screenContextLabel}</em>
           </div>
           {state.history.length > 0 ? (
             <div className="history-list">
@@ -517,6 +555,13 @@ function createPreviewApi(): Window["shakespeare"] {
       updatedAt: new Date().toISOString(),
       source: "browser_extension"
     },
+    screenContext: {
+      text: "Error: Auth callback failed in src/auth/session.ts",
+      sourceName: "Entire Screen",
+      capturedAt: new Date().toISOString(),
+      latencyMs: 1320
+    },
+    screenContextBusy: false,
     pendingPreview: null,
     history: [],
     lastReceipt: {
@@ -584,6 +629,16 @@ function createPreviewApi(): Window["shakespeare"] {
     acceptPreview: async () => ({ ok: true }),
     cancelPreview: async () => ({ ok: true }),
     regeneratePreview: async () => ({ ok: true }),
+    captureScreenContext: async () => ({
+      ok: true,
+      snapshot: {
+        text: "Error: Auth callback failed in src/auth/session.ts",
+        sourceName: "Entire Screen",
+        capturedAt: new Date().toISOString(),
+        latencyMs: 1320
+      }
+    }),
+    clearScreenContext: async () => ({ ok: true }),
     openExternal: async (url) => {
       window.open(url, "_blank", "noopener,noreferrer");
     },

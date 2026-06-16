@@ -2,7 +2,7 @@
   "name": "shakespeare",
   "version": "0.1.0",
   "description": "Cross-platform context-aware prompt compiler for macOS and Windows.",
-  "main": "dist/main/index.js",
+  "main": "out/main/index.js",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n backend,app \"npm run dev:backend\" \"npm run dev:app\"",
@@ -22,7 +22,7 @@
       "output": "release"
     },
     "files": [
-      "dist/**/*",
+      "out/**/*",
       "package.json"
     ],
     "mac": {
@@ -40,7 +40,8 @@
   "dependencies": {
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.12",
