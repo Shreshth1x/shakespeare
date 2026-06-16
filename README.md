@@ -167,11 +167,38 @@ PORT=8787
 
 `SHAKESPEARE_CLIENT_TOKEN` is only required when the backend is not localhost-only.
 
+## Release Packaging
+
+Local unpacked builds:
+
+```bash
+npm run package
+npm run qa:package
+```
+
+Installer builds:
+
+```bash
+npm run dist
+```
+
+The app uses `electron-builder` with a real app icon, macOS hardened runtime entitlements, macOS notarization support, and an assisted Windows NSIS installer. Cross-platform package checks run in `.github/workflows/desktop-ci.yml` on macOS 14 and Windows latest.
+
+Public distribution requires signing credentials:
+
+- macOS: Apple Developer Program membership, a Developer ID Application certificate, and notarization credentials. Prefer App Store Connect API credentials through `APPLE_API_KEY`, `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER`.
+- Windows: a code-signing certificate exposed to electron-builder through `CSC_LINK` and `CSC_KEY_PASSWORD`, or the team's Windows signing provider.
+- Backend: use Doppler for the backend project; do not bake provider keys into the Electron app.
+
+Manual release coverage is tracked in [QA_MATRIX.md](QA_MATRIX.md).
+
 ## Verification
 
 ```bash
 npm run typecheck
 npm test
+npm run check:syntax
 npm run build
 npm run package
+npm run qa:package
 ```
