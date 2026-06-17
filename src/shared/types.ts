@@ -16,6 +16,7 @@ export type RouterMode =
   | "marketing_sales"
   | "job_career"
   | "image_prompt"
+  | "visual_feedback"
   | "tool_reference"
   | "writing_reply"
   | "decision_advice"
@@ -58,6 +59,7 @@ export type RouterFailureMode =
   | "fabrication_risk"
   | "bland_options"
   | "vague_visual_direction"
+  | "missing_visual_context"
   | "needs_decomposition"
   | "tone_mismatch"
   | "parseability";
@@ -75,6 +77,7 @@ export type RouterPattern =
   | "marketing_artifact"
   | "career_artifact"
   | "image_generation_prompt"
+  | "visual_feedback"
   | "tool_workflow"
   | "reply_draft"
   | "decision_matrix"
@@ -95,6 +98,7 @@ export type RouterArchetype =
   | "job_career"
   | "creative_brainstorming"
   | "image_visual_prompt"
+  | "visual_design_feedback"
   | "tool_reference_workflow"
   | "ui_redesign_reference";
 
@@ -117,6 +121,7 @@ export type RouterValuePrimitive =
   | "career_evidence_contract"
   | "creative_diversity_contract"
   | "image_visual_contract"
+  | "visual_feedback_contract"
   | "generic_clarity_contract";
 
 export interface RouterDecision {

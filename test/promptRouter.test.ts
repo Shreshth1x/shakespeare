@@ -102,11 +102,12 @@ test("router turns Mobbin UI redesign asks into concrete reference-driven redesi
   assert(routed.packet.contract.length >= 4);
   expectOverhaulMetadata(routed.decision, "ui_redesign_reference", "reference_extraction");
   assert.match(routed.fallback, /Use mobbin mcp first/i);
-  assert.match(routed.fallback, /Extract concrete visual decisions/i);
-  assert.match(routed.fallback, /typography scale/i);
-  assert.match(routed.fallback, /Electron renderer/i);
+  assert.match(routed.fallback, /concrete UI decisions/i);
+  assert.match(routed.fallback, /typography/i);
+  assert.match(routed.fallback, /renderer|components|styles/i);
   assert.match(routed.fallback, /screenshot|visual check/i);
   assert.doesNotMatch(routed.fallback, /^Goal:/);
+  assert.doesNotMatch(routed.fallback, /\bDiscovery contract\b|\bAcceptance contract\b|\bImplementation contract\b/);
 });
 
 test("router treats typo-heavy broad Mobbin style prompts as UI redesign, not generic tool workflow", () => {
@@ -133,9 +134,37 @@ test("router treats typo-heavy broad Mobbin style prompts as UI redesign, not ge
   assert.doesNotMatch(routed.fallback, /^Use mobbin mcp as the required source/i);
   assert.match(routed.fallback, /Redesign the current app UI/i);
   assert.match(routed.fallback, /all primary visible app surfaces and states/i);
-  assert.match(routed.fallback, /Whisper\/Wispr Flow-style/i);
-  assert.match(routed.fallback, /typography scale/i);
+  assert(routed.packet.contract.some((slot) => /Whisper\/Wispr Flow-style/i.test(slot)));
+  assert.match(routed.fallback, /typography/i);
   assert.match(routed.fallback, /screenshot|visual check/i);
+});
+
+test("router uses screen context and visual phrasing for design feedback instead of implementation", () => {
+  const routed = buildRoutedPrompt({
+    rough_prompt: "does this look cool?",
+    mode: "coding_agent",
+    optimization_mode: "speed",
+    context: {
+      active_app: "Codex",
+      window_title: "Codex",
+      detected_target: "Codex",
+      visible_text: "Design chat: cool logo. The screen shows a bold blue wordmark, a rounded icon, and typography options."
+    }
+  });
+
+  assert.equal(routed.decision.target, "codex");
+  assert.equal(routed.decision.mode, "visual_feedback");
+  assert.equal(routed.decision.pattern, "visual_feedback");
+  assert.equal(routed.decision.archetype, "visual_design_feedback");
+  assert.equal(routed.decision.valuePrimitive, "visual_feedback_contract");
+  assert.equal(routed.decision.failureMode, "missing_visual_verification");
+  assert(routed.contextUsed.includes("visible_text"));
+  assert.match(routed.fallback, /Review the visible design/i);
+  assert.match(routed.fallback, /composition|hierarchy|typography|color/i);
+  assert.match(routed.fallback, /strongest part/i);
+  assert.match(routed.fallback, /weakest part/i);
+  assert.doesNotMatch(routed.fallback, /Implement in the current repo/i);
+  assert.doesNotMatch(routed.fallback, /\bDiscovery contract\b|\bAcceptance contract\b|\bImplementation contract\b/);
 });
 
 test("router lets Gmail and Slack override the default coding mode", () => {
@@ -485,7 +514,7 @@ test("router exposes all 15 archetype fallback contracts", () => {
       },
       expectedArchetype: "ui_redesign_reference",
       expectedValuePrimitive: "reference_extraction",
-      fallbackSignals: [/Use mobbin mcp first/i, /typography scale/i, /spacing rhythm/i, /screenshot|visual check/i]
+      fallbackSignals: [/Use mobbin mcp first/i, /typography/i, /spacing/i, /screenshot|visual check/i]
     }
   ];
 
@@ -512,8 +541,8 @@ test("router exposes all 15 archetype fallback contracts", () => {
     if (routed.packet.contract.length < 4) {
       failures.push(`${fixture.name}: expected at least 4 packet contract slots, got ${routed.packet.contract.length}`);
     }
-    if ((routed.fallback.match(/\b(?:contract|Done means)\b/g) ?? []).length < 4) {
-      failures.push(`${fixture.name}: expected fallback to expose at least 4 concrete contract lines`);
+    if (/\b(?:Discovery|Acceptance|Implementation|Verification|Evidence|Output) contract\b/i.test(routed.fallback)) {
+      failures.push(`${fixture.name}: fallback exposed internal contract labels`);
     }
   }
 

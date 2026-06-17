@@ -17,6 +17,7 @@ export const SPEED_COMPILER_INSTRUCTIONS = [
   "Preserve intent. Do not add unsupported facts, filenames, sources, errors, credentials, preferences, or constraints.",
   "Use observed context only when clearly relevant. Treat context as observed, not guaranteed.",
   "Apply the packet's archetype and value primitive. Add that missing contract only: tool/source binding, evidence, schema, audience/tone, decision criteria, acceptance, reproduction, learning loop, visual verification, or uncertainty.",
+  "Write the result as a normal user prompt. Do not expose labels like Discovery contract, Acceptance contract, or Evidence contract.",
   "Speed rules: concise, artifact-ready, no preamble, no explanation, no markdown fence.",
   "Return only the rewritten prompt."
 ].join("\n");
@@ -92,6 +93,10 @@ const CAREER_RE =
   /\b(resume|résumé|cover letter|linkedin|interview|job description|job post|target role|recruiter|career|STAR|behavioral|internship|tell me about yourself|career gap|portfolio project|networking message)\b/i;
 const IMAGE_PROMPT_RE =
   /\b(image prompt|midjourney|stable diffusion|dall[- ]?e|image generation|generate an image|illustration prompt|visual prompt|prompt for [\s\S]{0,60}(image|illustration|icon|poster|workspace)|photorealistic prompt|vector-style illustration)\b/i;
+const VISUAL_FEEDBACK_RE =
+  /\b(does this|do these|is this|are these|how does this|what do you think|feedback on|critique|review)\b[\s\S]{0,90}\b(look|feel|read|work|good|cool|nice|polished|professional|clear|usable|design|logo|visual|screen|mockup|ui|layout|composition)\b/i;
+const VISUAL_CONTEXT_RE =
+  /\b(design|logo|brand|visual|image|screenshot|mockup|ui|layout|typography|palette|color|composition|figma|hero|poster|icon|landing page|screen|wireframe)\b/i;
 const CREATIVE_RE = /\b(brainstorm|tagline|names?|ideas?|concepts?|story|premises|themes?|creative brief|slogan|naming|moodboard)\b/i;
 const MULTI_STEP_RE = /\b(and then|also|after that|first|second|third|multiple|steps?|plan)\b/i;
 const TONE_RE = /\b(tone|warm|concise|friendly|direct|professional|casual|audience|voice)\b/i;
@@ -203,116 +208,132 @@ export function buildRouterFallback(request: CompilePromptRequest, decision: Rou
   const safetyLine = safetyContractLine(decision.valuePrimitive);
 
   switch (decision.pattern) {
+    case "visual_feedback":
+      return joinLines([
+        `Review the visible design or visual artifact: ${request.rough_prompt}`,
+        compactContext ? `Use the observed screen/context as evidence: ${compactContext}` : null,
+        "Give concise design feedback instead of treating this as an implementation task.",
+        "Assess the visible artifact on composition, hierarchy, typography, color, polish, clarity, and brand fit.",
+        "Say whether it works overall, name the strongest part, name the weakest part, and give 2-3 concrete improvements.",
+        "Do not invent unseen details; if the visual context is missing or insufficient, ask for a screenshot or describe what evidence is needed.",
+        safetyLine
+      ]);
     case "ui_redesign":
       return joinLines([
-        `Redesign the current app UI: ${request.rough_prompt}`,
+        `Redesign the current app UI based on the request: ${request.rough_prompt}`,
         compactContext ? `Observed context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        `Use ${detectReferenceToolName(request.rough_prompt) ?? "the named reference source"} first when a reference is provided, then translate the reference into concrete UI decisions.`,
+        broadUiNaturalScopeLine(request.rough_prompt),
+        "Inspect the current renderer/components/styles, preserve existing behavior, and apply the redesign only to the relevant surfaces.",
+        "Cover typography, spacing, palette, density, controls, empty states, and preview states.",
+        "Verify with tests plus a screenshot or visual check, and summarize the references and changed files.",
         safetyLine
       ]);
     case "tool_workflow":
       return joinLines([
-        `Use ${detectReferenceToolName(request.rough_prompt) ?? "the named tool/source"} as the required source for: ${request.rough_prompt}`,
+        `Use ${detectReferenceToolName(request.rough_prompt) ?? "the named tool/source"} before answering: ${request.rough_prompt}`,
         compactContext ? `Observed context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Inspect the named tool/source first, extract the facts, examples, constraints, or reference patterns that matter, then produce the requested deliverable.",
+        "Tie the final answer directly to what the source showed, and do not invent tool results, credentials, unavailable files, or source-backed claims.",
         safetyLine
       ]);
     case "research_compare":
       return joinLines([
         `Research: ${request.rough_prompt}`,
         compactContext ? `Observed context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Define the scope and comparison dimensions first. Use current primary sources for volatile claims, include dates, separate evidence from interpretation, and call out caveats.",
+        "Compare the strongest options and end with a concise recommendation or key takeaway.",
         safetyLine
       ]);
     case "decision_matrix":
       return joinLines([
-        `Decision: ${request.rough_prompt}`,
+        `Help make this decision: ${request.rough_prompt}`,
         compactContext ? `Observed context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Name the options, criteria, constraints, and tradeoffs. Compare each option against the criteria, recommend one path, and state what new information would change the answer.",
         safetyLine
       ]);
     case "agent_fix":
       return joinLines([
-        `Implement in the current repo: ${request.rough_prompt}`,
+        `Work in the current repo on this request: ${request.rough_prompt}`,
         compactContext ? `Use observed context where relevant: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Inspect the existing product flow and nearby code before editing. Define the smallest useful implementation slice and acceptance criteria, make only the scoped change, verify with the closest tests/checks, and summarize changed files plus evidence.",
         safetyLine
       ]);
     case "debug_root_cause":
       return joinLines([
         `Investigate the observed failure: ${request.rough_prompt}`,
         compactContext ? `Observed evidence: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Use the evidence to reproduce or inspect the failing path, identify the root cause before editing, apply the narrowest fix if appropriate, and verify against the exact failure or closest check.",
         safetyLine
       ]);
     case "extract_schema":
       return joinLines([
         `Transform the input: ${request.rough_prompt}`,
         compactContext ? `Observed input/context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Return structured output only. Use a stable schema with clear fields, preserve source meaning, use null or explicit empty values for missing data, and do not infer unsupported details.",
         safetyLine
       ]);
     case "summarize_translate":
       return joinLines([
         `Summarize or translate: ${request.rough_prompt}`,
         compactContext ? `Source context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Preserve key facts, nuance, named entities, numbers, and uncertainty. Match the requested audience, length, language, and format, and do not add outside information.",
         safetyLine
       ]);
     case "teach_practice":
       return joinLines([
         `Teach: ${request.rough_prompt}`,
         compactContext ? `Learner/context clues: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Assume the learner is smart but new unless a level is provided. Start with the mental model, use one concrete example, avoid unnecessary jargon, include 2-3 practice checks, and call out common misconceptions.",
         safetyLine
       ]);
     case "marketing_artifact":
       return joinLines([
         `Create the marketing artifact: ${request.rough_prompt}`,
         compactContext ? `Observed context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Specify audience, offer, channel, funnel stage, brand voice, and CTA before drafting. Make it fit the requested channel and do not invent claims, metrics, testimonials, guarantees, customers, or proof points.",
         safetyLine
       ]);
     case "career_artifact":
       return joinLines([
         `Create the career artifact: ${request.rough_prompt}`,
         compactContext ? `User/job context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Tailor it to the target role/company and requested format. Use only the user's supplied experience, resume, job description, or context, and do not fabricate credentials, employers, metrics, education, or responsibilities.",
         safetyLine
       ]);
     case "creative_brief":
       return joinLines([
         `Generate ideas for: ${request.rough_prompt}`,
         compactContext ? `Context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Produce a useful number of options, vary them across clear diversity axes, respect style and audience constraints, include one-line rationales, and mark the strongest options.",
         safetyLine
       ]);
     case "image_generation_prompt":
       return joinLines([
         `Create an image-generation prompt for: ${request.rough_prompt}`,
         compactContext ? `Visual/source context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Specify subject, composition, medium, style, color/light, key details, framing, negative constraints, and anything that must be avoided. Remove contradictory style instructions.",
         safetyLine
       ]);
     case "reply_draft":
       return joinLines([
         `Draft the reply: ${request.rough_prompt}`,
         compactContext ? `Conversation context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Infer the recipient, channel, relationship, and reply purpose from context when available. Match the tone, keep commitments conservative, avoid inventing facts or obligations, and return only the reply draft.",
         safetyLine
       ]);
     case "write_edit":
       return joinLines([
         `Write or edit: ${request.rough_prompt}`,
         compactContext ? `Source/context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Preserve the user's facts, goal, and meaning. Make audience, channel, tone, desired action, length, and format explicit where missing, and do not invent commitments, claims, or preferences.",
         safetyLine
       ]);
     case "practical_plan":
       return joinLines([
         `Create a practical plan for: ${request.rough_prompt}`,
         compactContext ? `Current situation/context: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Identify the goal, constraints, resources, timeline, and unknowns. Prioritize the next 3-5 actions, call out risks and assumptions, include decision points, and end with the first concrete step.",
         safetyLine
       ]);
     case "general_task":
@@ -320,7 +341,7 @@ export function buildRouterFallback(request: CompilePromptRequest, decision: Rou
       return joinLines([
         `Task: ${request.rough_prompt}`,
         compactContext ? `Use this observed context only where relevant: ${compactContext}` : null,
-        ...buildContractSlots(request, decision),
+        "Preserve the exact goal and explicit constraints. Add only the missing output shape, evidence, audience, or acceptance criterion that prevents ambiguity, avoid invented context, and make the request actionable.",
         safetyLine
       ]);
   }
@@ -407,6 +428,7 @@ function selectArchetypeRoute(request: CompilePromptRequest, target: RouterTarge
     return route("practical_guidance");
   }
 
+  if (isVisualFeedbackRequest(roughPrompt, text)) return route("visual_design_feedback");
   if (isUiRedesignRequest(text)) return route("ui_redesign_reference");
   if (hasExplicitToolIntent(text)) return route("tool_reference_workflow");
   if (
@@ -469,6 +491,8 @@ function route(archetype: RouterArchetype, patternOverride?: RouterPattern): Arc
       return { archetype, mode: "creative", pattern: "creative_brief" };
     case "image_visual_prompt":
       return { archetype, mode: "image_prompt", pattern: "image_generation_prompt" };
+    case "visual_design_feedback":
+      return { archetype, mode: "visual_feedback", pattern: "visual_feedback" };
     case "tool_reference_workflow":
       return { archetype, mode: "tool_reference", pattern: "tool_workflow" };
     case "ui_redesign_reference":
@@ -486,6 +510,7 @@ function selectValuePrimitive(
   if (routeChoice.archetype === "ui_redesign_reference") {
     return "reference_extraction";
   }
+  if (routeChoice.archetype === "visual_design_feedback") return "visual_feedback_contract";
   if (routeChoice.archetype === "tool_reference_workflow") return "tool_binding";
   if (isVolatileFactRequest(text) && routeChoice.archetype === "research_info") return "evidence_contract";
 
@@ -535,6 +560,7 @@ function detectFailureMode(
   if (primitive === "tool_binding") return "ignored_tool";
   if (primitive === "evidence_contract" && isVolatileFactRequest(text)) return "hallucination_risk";
   if (primitive === "evidence_contract") return "missing_evidence";
+  if (primitive === "visual_feedback_contract") return hasContext ? "missing_visual_verification" : "missing_visual_context";
   if (DEICTIC_RE.test(rough) && hasContext) return "missing_context";
   if (primitive === "schema_contract" || ((routeChoice.mode === "extraction" || EXTRACTION_RE.test(text)) && !FORMAT_RE.test(text))) return "parseability";
   if (primitive === "audience_tone_contract") return TONE_RE.test(text) ? "wrong_output_shape" : "tone_mismatch";
@@ -675,7 +701,7 @@ function piece(key: keyof PromptContext, label: string, value: string | null | u
 }
 
 function joinLines(parts: Array<string | null>): string {
-  return parts.filter(Boolean).join("\n");
+  return parts.filter(Boolean).join(" ");
 }
 
 function truncate(value: string, maxLength: number): string {
@@ -806,6 +832,13 @@ function buildContractSlots(request: CompilePromptRequest, decision: RouterDecis
         "Coherence contract: remove contradictory style instructions and keep the image prompt internally consistent.",
         "Output contract: return one clean image prompt, plus optional negative prompt only when useful."
       ];
+    case "visual_feedback":
+      return [
+        "Evidence contract: use visible screen/context as evidence for the critique and do not invent unseen visual details.",
+        "Critique contract: evaluate composition, hierarchy, typography, color, polish, clarity, and brand fit.",
+        "Judgment contract: answer whether it works overall, then name the strongest and weakest parts.",
+        "Action contract: give 2-3 concrete improvements and ask for a screenshot if visual context is insufficient."
+      ];
     case "reply_draft":
       return [
         "Audience contract: infer the recipient, channel, and relationship from context when available.",
@@ -844,6 +877,13 @@ function isUiRedesignRequest(text: string): boolean {
   return DESIGN_REFERENCE_TOOL_RE.test(text) && UI_DESIGN_ACTION_RE.test(text) && !isVolatileFactRequest(text);
 }
 
+function isVisualFeedbackRequest(roughPrompt: string, text: string): boolean {
+  if (/\b(image prompt|generate an image|midjourney|stable diffusion|dall[- ]?e)\b/i.test(roughPrompt)) return false;
+  if (VISUAL_FEEDBACK_RE.test(roughPrompt)) return true;
+  if (!VISUAL_FEEDBACK_RE.test(text)) return false;
+  return VISUAL_CONTEXT_RE.test(text);
+}
+
 function buildStyleReferenceLine(roughPrompt: string): string | null {
   if (!/\b(whisper flow|wispr flow|willow)\b/i.test(roughPrompt)) return null;
   return "Style contract: translate the requested Whisper/Wispr Flow-style direction into concrete UI rules: quiet typography, restrained palette, generous spacing, low-friction controls, and calm status/permission states.";
@@ -852,4 +892,9 @@ function buildStyleReferenceLine(roughPrompt: string): string | null {
 function broadUiScopeLine(roughPrompt: string): string | null {
   if (!/\beverything|all\b/i.test(roughPrompt)) return null;
   return "Scope contract: treat broad wording like \"everything\" as all primary visible app surfaces and states; identify those surfaces before editing.";
+}
+
+function broadUiNaturalScopeLine(roughPrompt: string): string | null {
+  if (!/\beverything|all\b/i.test(roughPrompt)) return null;
+  return "For broad wording like \"everything,\" identify all primary visible app surfaces and states before editing.";
 }

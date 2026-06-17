@@ -446,6 +446,32 @@ function buildFixtures(): RouterFixture[] {
       "make a prompt for a prompt compiler mascot-free image",
       "create an image prompt with negative constraints"
     ]),
+    ...fixture("visual_design_feedback", "visual_design_feedback", "visual_feedback", "visual_feedback_contract", [/visible|screen|context/i, /composition|hierarchy|typography|color/i, /strongest/i, /improvements?|screenshot/i], [
+      "does this look good?",
+      "does this look cool?",
+      "does this logo look professional?",
+      "is this design working?",
+      "how does this screen feel?",
+      "what do you think of this mockup?",
+      "review this visible design",
+      "critique this logo",
+      "does this layout feel polished?",
+      "is this hero section clear?",
+      "does this icon look premium?",
+      "how does this visual direction read?",
+      "is this poster composition good?",
+      "does this typography look right?",
+      "are these colors working?",
+      "does this app screen look usable?",
+      "give feedback on this design",
+      "review the screenshot on my screen",
+      "does this brand mark look cool?",
+      "is this UI visually balanced?"
+    ], {
+      active_app: "Codex",
+      window_title: "Codex",
+      visible_text: "Design chat: cool logo. The screen shows a blue wordmark, rounded icon, layout options, and typography samples."
+    }),
     ...fixture("tool_reference_workflow", "tool_reference_workflow", "tool_workflow", "tool_binding", [/Use|First/i, /tool|source|Figma|Notion|dataset|docs|web search/i, /Extract|Inspect/i, /deliverable|final/i], [
       "use Figma to inspect the design and implement the matching React component",
       "use web search to compare these pricing tiers",
@@ -504,8 +530,8 @@ function assertCoverage(fixtures: RouterFixture[]): void {
     return acc;
   }, new Map());
 
-  if (counts.size !== 15) {
-    throw new Error(`Expected 15 archetypes, got ${counts.size}`);
+  if (counts.size < 15) {
+    throw new Error(`Expected at least 15 archetypes, got ${counts.size}`);
   }
   if (fixtures.length < 300) {
     throw new Error(`Expected at least 300 fixtures, got ${fixtures.length}`);

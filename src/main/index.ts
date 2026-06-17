@@ -23,6 +23,9 @@ import type {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FOCUSED_BROWSER_CONTEXT_MAX_AGE_MS = 10_000;
+const SCREEN_CONTEXT_MAX_AGE_MS = 30_000;
+const SCREEN_CONTEXT_PROMPT_RE =
+  /\b(this|that|these|those|screen|visible|shown|screenshot|image|logo|design|mockup|ui|layout|look|looks|cool|good|visual)\b/i;
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -207,6 +210,7 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
       throw new Error(settings.focusedFieldRewriteEnabled ? "No selected or focused editable text found." : "No selected text found.");
     }
 
+    const screenSnapshot = await screenSnapshotForRewrite(settings, capture.text);
     const context = buildContext(
       windowContext,
       capture.text,
@@ -214,7 +218,7 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
       settings,
       browserContext,
       ideBridge.getLatest(),
-      screenContext.getLatest()
+      screenSnapshot
     );
     if (isAppDenied(context, effectiveAppDenylist(settings))) {
       throw new Error("This app or window is on your denylist.");
@@ -476,6 +480,29 @@ function notify(title: string, body: string): void {
   if (Notification.isSupported()) {
     new Notification({ title, body }).show();
   }
+}
+
+async function screenSnapshotForRewrite(settings: AppSettings, promptText: string) {
+  const latest = screenContext.getLatest();
+  if (!settings.screenContextEnabled || !shouldRefreshScreenContext(promptText, latest)) {
+    return latest;
+  }
+
+  try {
+    const snapshot = await screenContext.capture();
+    pushState();
+    return snapshot;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Screen capture failed.";
+    notify("Screen context failed", message);
+    return latest;
+  }
+}
+
+function shouldRefreshScreenContext(promptText: string, latest: ReturnType<typeof screenContext.getLatest>): boolean {
+  if (!SCREEN_CONTEXT_PROMPT_RE.test(promptText)) return false;
+  if (!latest) return true;
+  return Date.now() - new Date(latest.capturedAt).getTime() > SCREEN_CONTEXT_MAX_AGE_MS;
 }
 
 function isRecentBrowserContext(browserContext: ReturnType<typeof browserBridge.getLatest>): boolean {
