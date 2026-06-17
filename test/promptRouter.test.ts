@@ -67,6 +67,20 @@ test("router selects coding-agent fix pattern for Codex prompts", () => {
   assert.equal(decision.reasoningEffort, "none");
 });
 
+test("router uses model-supported reasoning effort values", () => {
+  const baseRequest: Omit<CompilePromptRequest, "optimization_mode"> = {
+    rough_prompt: "fix this auth bug",
+    mode: "coding_agent",
+    context: {
+      active_app: "Codex"
+    }
+  };
+
+  assert.equal(routePrompt({ ...baseRequest, optimization_mode: "speed" }).reasoningEffort, "none");
+  assert.equal(routePrompt({ ...baseRequest, optimization_mode: "quality" }).reasoningEffort, "low");
+  assert.equal(routePrompt({ ...baseRequest, optimization_mode: "max_quality" }).reasoningEffort, "medium");
+});
+
 test("router turns Mobbin UI redesign asks into concrete reference-driven redesign prompts", () => {
   const routed = buildRoutedPrompt({
     rough_prompt: "use the mobbin mcp to redesign the electron app UI to be like whisper flow style of clean typography and colors",

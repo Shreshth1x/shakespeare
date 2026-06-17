@@ -118,7 +118,7 @@ async function compileLegacyWithModel(request: CompilePromptRequest): Promise<Co
       instructions: buildCompilerInstructions(request.mode, request.optimization_mode, request.custom_mode),
       input: buildCompilerInput(request),
       store: false,
-      reasoning: { effort: request.optimization_mode === "max_quality" ? "low" : "minimal" },
+      reasoning: { effort: request.optimization_mode === "max_quality" ? "medium" : "low" },
       max_output_tokens: request.optimization_mode === "quality" ? 750 : 900
     },
     request.optimization_mode === "quality" ? 3000 : 4500

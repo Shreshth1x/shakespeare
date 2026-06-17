@@ -128,7 +128,7 @@ export interface RouterDecision {
   pattern: RouterPattern;
   contextBudgetChars: number;
   outputBudgetTokens: number;
-  reasoningEffort: "none" | "minimal" | "low";
+  reasoningEffort: "none" | "low" | "medium" | "high" | "xhigh";
   needsModel: boolean;
 }
 

@@ -659,8 +659,8 @@ function outputBudgetFor(mode: OptimizationMode, pattern: RouterPattern, primiti
 
 function reasoningEffortFor(mode: OptimizationMode): RouterDecision["reasoningEffort"] {
   if (mode === "speed") return "none";
-  if (mode === "quality") return "minimal";
-  return "low";
+  if (mode === "quality") return "low";
+  return "medium";
 }
 
 function piece(key: keyof PromptContext, label: string, value: string | null | undefined, maxChars: number): ContextPiece | null {
