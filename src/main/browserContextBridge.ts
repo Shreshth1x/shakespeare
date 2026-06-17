@@ -1,8 +1,11 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
 import type { BrowserContextSnapshot } from "../shared/types";
 
 const MAX_BODY_BYTES = 80_000;
 const FRESHNESS_MS = 5 * 60 * 1000;
+const REPLACEMENT_TIMEOUT_MS = 1800;
+const REPLACEMENT_TTL_MS = 5000;
 
 export interface BrowserContextBridge {
   port: number;
@@ -10,10 +13,22 @@ export interface BrowserContextBridge {
   start: () => Promise<void>;
   stop: () => Promise<void>;
   getLatest: () => BrowserContextSnapshot | null;
+  replaceFocusedText: (text: string, targetUrl?: string) => Promise<boolean>;
+}
+
+interface PendingBrowserReplacement {
+  id: string;
+  text: string;
+  url: string;
+  hostname: string;
+  createdAt: number;
+  resolve: (ok: boolean) => void;
+  timeout: NodeJS.Timeout;
 }
 
 export function createBrowserContextBridge(port = Number(process.env.SHAKESPEARE_BROWSER_CONTEXT_PORT ?? 8791)): BrowserContextBridge {
   let latest: BrowserContextSnapshot | null = null;
+  let pendingReplacement: PendingBrowserReplacement | null = null;
   let server: Server | null = null;
   let running = false;
   let actualPort = port;
@@ -44,7 +59,8 @@ export function createBrowserContextBridge(port = Number(process.env.SHAKESPEARE
           if (req.method === "GET" && req.url === "/healthz") {
             sendJson(res, 200, {
               ok: true,
-              latest: latest ? summarize(latest) : null
+              latest: latest ? summarize(latest) : null,
+              pendingReplacement: pendingReplacement ? { id: pendingReplacement.id, hostname: pendingReplacement.hostname } : null
             });
             return;
           }
@@ -61,6 +77,37 @@ export function createBrowserContextBridge(port = Number(process.env.SHAKESPEARE
 
               latest = next;
               sendJson(res, 200, { ok: true, latest: summarize(next) });
+            } catch (error) {
+              sendJson(res, 400, { error: error instanceof Error ? error.message : "Invalid request." });
+            }
+            return;
+          }
+
+          if (req.method === "GET" && req.url?.startsWith("/v1/browser-replacement")) {
+            const requestUrl = new URL(req.url, "http://127.0.0.1");
+            const pageUrl = requestUrl.searchParams.get("url") ?? "";
+            const command = takePendingReplacement(pendingReplacement, pageUrl);
+            if (!command) {
+              res.writeHead(204);
+              res.end();
+              return;
+            }
+
+            sendJson(res, 200, {
+              id: command.id,
+              text: command.text
+            });
+            return;
+          }
+
+          if (req.method === "POST" && req.url === "/v1/browser-replacement/complete") {
+            try {
+              const rawBody = await readBody(req);
+              const parsed = JSON.parse(rawBody) as { id?: unknown; ok?: unknown };
+              if (pendingReplacement && parsed.id === pendingReplacement.id) {
+                completePendingReplacement(Boolean(parsed.ok));
+              }
+              sendJson(res, 200, { ok: true });
             } catch (error) {
               sendJson(res, 400, { error: error instanceof Error ? error.message : "Invalid request." });
             }
@@ -91,6 +138,7 @@ export function createBrowserContextBridge(port = Number(process.env.SHAKESPEARE
         }
 
         server.close(() => {
+          completePendingReplacement(false);
           server = null;
           running = false;
           resolve();
@@ -100,8 +148,50 @@ export function createBrowserContextBridge(port = Number(process.env.SHAKESPEARE
       if (!latest) return null;
       const age = Date.now() - new Date(latest.updatedAt).getTime();
       return age <= FRESHNESS_MS ? structuredClone(latest) : null;
-    }
+    },
+    replaceFocusedText: (text: string, targetUrl?: string) =>
+      new Promise((resolve) => {
+        if (!latest || !latest.focusedText || latest.focusedTextTruncated) {
+          resolve(false);
+          return;
+        }
+
+        const url = targetUrl || latest.url;
+        completePendingReplacement(false);
+        pendingReplacement = {
+          id: randomUUID(),
+          text,
+          url,
+          hostname: safeHostname(url) || latest.hostname,
+          createdAt: Date.now(),
+          resolve,
+          timeout: setTimeout(() => completePendingReplacement(false), REPLACEMENT_TIMEOUT_MS)
+        };
+      })
   };
+
+  function completePendingReplacement(ok: boolean): void {
+    if (!pendingReplacement) return;
+    const command = pendingReplacement;
+    pendingReplacement = null;
+    clearTimeout(command.timeout);
+    command.resolve(ok);
+  }
+}
+
+function takePendingReplacement(command: PendingBrowserReplacement | null, pageUrl: string): PendingBrowserReplacement | null {
+  if (!command) return null;
+  if (Date.now() - command.createdAt > REPLACEMENT_TTL_MS) return null;
+  if (!pageUrl || pageUrl !== command.url) return null;
+  return command;
+}
+
+function safeHostname(url: string): string | null {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
 }
 
 function normalizeSnapshot(input: Partial<BrowserContextSnapshot>): BrowserContextSnapshot | null {
@@ -119,7 +209,8 @@ function normalizeSnapshot(input: Partial<BrowserContextSnapshot>): BrowserConte
     title: truncate(input.title ?? "", 250),
     hostname: truncate(input.hostname || parsedUrl.hostname, 120),
     selectedText: truncate(input.selectedText ?? "", 1600),
-    focusedText: truncate(input.focusedText ?? "", 1600),
+    focusedText: truncate(input.focusedText ?? "", 24_000),
+    focusedTextTruncated: Boolean(input.focusedTextTruncated),
     visibleText: truncate(input.visibleText ?? "", 2600),
     updatedAt: new Date().toISOString(),
     source: "browser_extension"
@@ -133,6 +224,7 @@ function summarize(snapshot: BrowserContextSnapshot) {
     hostname: snapshot.hostname,
     hasSelection: snapshot.selectedText.length > 0,
     hasFocusedText: snapshot.focusedText.length > 0,
+    focusedTextTruncated: Boolean(snapshot.focusedTextTruncated),
     hasVisibleText: snapshot.visibleText.length > 0,
     updatedAt: snapshot.updatedAt
   };

@@ -36,6 +36,7 @@ For local UI work without an OpenAI key, set `SHAKESPEARE_MOCK_MODEL=true` in th
 
 - Global rewrite hotkey with Speed/Quality modes.
 - Editable hotkey, preview hotkey, and backend URL.
+- Focused-field rewrite fallback: click inside an editable field and press the rewrite hotkey when no text is selected.
 - Optional preview-before-replace flow with accept, regenerate, and cancel.
 - Custom prompt modes with local saved instructions.
 - Local team policy import for shared modes and admin-locked privacy controls.
@@ -75,9 +76,10 @@ The extension sends bounded page context to the local desktop app only:
 - URL, title, and hostname.
 - Current browser selection.
 - Focused input/contenteditable text.
+- Focused input/contenteditable replacement commands when `Focused field rewrite` is enabled.
 - Bounded visible page text from the main page area.
 
-The desktop app ignores this data unless `Browser context` is enabled.
+The desktop app ignores this data unless `Browser context` or `Focused field rewrite` is enabled.
 
 ## IDE Context Extension
 
@@ -113,6 +115,7 @@ The dashboard can import a local team policy JSON file shape. This is the no-Sup
     }
   ],
   "privacyControls": {
+    "focusedFieldRewriteEnabled": { "value": true, "locked": false },
     "screenContextEnabled": { "value": false, "locked": true },
     "localHistoryEnabled": { "value": false, "locked": true }
   },

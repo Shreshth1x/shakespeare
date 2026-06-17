@@ -30,6 +30,7 @@ export interface RouterPacket {
   pattern: RouterDecision["pattern"];
   failure_mode: RouterDecision["failureMode"];
   rough_prompt: string;
+  contract: string[];
   context?: string;
 }
 
@@ -64,7 +65,8 @@ const CODING_RE =
 const CODING_ACTION_RE = /\b(fix|implement|refactor|test|build|ship|add|update|wire|integrate)\b/i;
 const UI_SURFACE_RE = /\b(ui|ux|interface|screens?|dashboard|electron app|frontend|renderer|settings|onboarding|component|layout|design system)\b/i;
 const UI_DESIGN_ACTION_RE =
-  /\b(redesign|restyle|polish|visual design|typography|colors?|palette|spacing|clean|cleaner|look like|improve|benchmark|reference|inspiration|whisper flow|wispr flow|willow)\b/i;
+  /\b(redesign|redeseign|restyle|polish|visual design|typography|colors?|palette|spacing|clean|cleaner|look like|look .*style|improve|benchmark|reference|inspiration|whisper flow|wispr flow|willow)\b/i;
+const DESIGN_REFERENCE_TOOL_RE = /\b(mobbin|figma|design mcp|ui references?|product ui references?)\b/i;
 const TOOL_REFERENCE_RE =
   /\b(mobbin|figma|mcp|browser|web search|search the web|github|notion|google drive|gmail|slack|linear|supabase|dataset|csv|screenshots?|docs?|documentation|api|reference|references|inspiration|benchmark|examples?)\b/i;
 const EXPLICIT_TOOL_ACTION_RE =
@@ -177,7 +179,8 @@ export function buildRouterPacket(request: CompilePromptRequest, decision: Route
     mode: decision.mode,
     pattern: decision.pattern,
     failure_mode: decision.failureMode,
-    rough_prompt: truncate(request.rough_prompt, 2000)
+    rough_prompt: truncate(request.rough_prompt, 2000),
+    contract: buildContractSlots(request, decision).map((slot) => truncate(slot, 180))
   };
 
   if (compactContext) {
@@ -202,118 +205,114 @@ export function buildRouterFallback(request: CompilePromptRequest, decision: Rou
   switch (decision.pattern) {
     case "ui_redesign":
       return joinLines([
-        `Redesign task: ${request.rough_prompt}`,
+        `Redesign the current app UI: ${request.rough_prompt}`,
         compactContext ? `Observed context: ${compactContext}` : null,
-        buildReferenceWorkflowLine(request.rough_prompt),
-        "Extract concrete visual decisions before editing: typography scale, spacing rhythm, color palette, component density, control styling, and empty/preview states.",
-        "Then inspect the current Electron renderer/components/styles and implement a scoped redesign that preserves existing behavior.",
-        "Deliverables: updated UI code/styles, short design-decision summary with references used, and tests plus screenshot or visual check.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "tool_workflow":
       return joinLines([
         `Use ${detectReferenceToolName(request.rough_prompt) ?? "the named tool/source"} as the required source for: ${request.rough_prompt}`,
         compactContext ? `Observed context: ${compactContext}` : null,
-        "First run or inspect the named tool/source. Extract the facts, examples, constraints, or decisions it provides before producing the deliverable.",
-        "Tie the final answer or implementation directly to what the tool/source showed, and cite or summarize references when useful.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "research_compare":
       return joinLines([
         `Research: ${request.rough_prompt}`,
         compactContext ? `Observed context: ${compactContext}` : null,
-        "Define the scope, use current primary sources for volatile claims, compare across clear dimensions, separate evidence from interpretation, include dates and caveats, and end with a concise recommendation or summary.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "decision_matrix":
       return joinLines([
         `Decision: ${request.rough_prompt}`,
         compactContext ? `Observed context: ${compactContext}` : null,
-        "Clarify the options and decision criteria, weigh tradeoffs against the user's constraints, recommend one path, and state what new information would change the answer.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "agent_fix":
       return joinLines([
         `Implement in the current repo: ${request.rough_prompt}`,
         compactContext ? `Use observed context where relevant: ${compactContext}` : null,
-        "First inspect the existing product flow and nearby code. Define the smallest useful implementation slice and acceptance criteria, make the scoped change without unrelated refactors, verify with the closest tests/checks, and summarize changed files.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "debug_root_cause":
       return joinLines([
         `Investigate the observed failure: ${request.rough_prompt}`,
         compactContext ? `Observed evidence: ${compactContext}` : null,
-        "Use logs/context as evidence. Reproduce or inspect the failing path, identify root cause before editing, apply the narrowest fix if appropriate, and verify against the exact failure or closest check.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "extract_schema":
       return joinLines([
         `Transform the input: ${request.rough_prompt}`,
         compactContext ? `Observed input/context: ${compactContext}` : null,
-        "Return the requested structured output only. Use a stable schema, preserve source meaning, use null for missing fields, and do not infer unsupported details.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "summarize_translate":
       return joinLines([
         `Summarize or translate: ${request.rough_prompt}`,
         compactContext ? `Source context: ${compactContext}` : null,
-        "Preserve key facts, nuance, named entities, and uncertainty. Use the requested audience, length, or format when provided. Do not add outside information.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "teach_practice":
       return joinLines([
         `Teach: ${request.rough_prompt}`,
         compactContext ? `Learner/context clues: ${compactContext}` : null,
-        "Assume the learner is smart but new unless stated otherwise. Start with the mental model, use one concrete example, avoid unnecessary jargon, then give 2-3 practice questions and check likely misconceptions.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "marketing_artifact":
       return joinLines([
         `Create the marketing artifact: ${request.rough_prompt}`,
         compactContext ? `Observed context: ${compactContext}` : null,
-        "Specify audience, offer, channel, funnel stage, brand voice, and CTA. Do not invent metrics, testimonials, guarantees, customer names, or unsupported claims.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "career_artifact":
       return joinLines([
         `Create the career artifact: ${request.rough_prompt}`,
         compactContext ? `User/job context: ${compactContext}` : null,
-        "Tailor to the target role or company when provided. Use only the user's supplied experience as evidence, avoid fabricating credentials, and return the requested format.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "creative_brief":
       return joinLines([
         `Generate ideas for: ${request.rough_prompt}`,
         compactContext ? `Context: ${compactContext}` : null,
-        "Give a useful number of options, vary them across clear diversity axes, stay within the style constraints, include a one-line rationale, and mark the strongest options.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "image_generation_prompt":
       return joinLines([
         `Create an image-generation prompt for: ${request.rough_prompt}`,
         compactContext ? `Visual/source context: ${compactContext}` : null,
-        "Specify subject, composition, medium, style, color/light, key details, constraints, and any negative constraints. Avoid contradictory style instructions.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "reply_draft":
       return joinLines([
         `Draft the reply: ${request.rough_prompt}`,
         compactContext ? `Conversation context: ${compactContext}` : null,
-        "Infer the likely audience and channel, match the appropriate tone, keep it concise, do not invent commitments or facts, and return only the reply draft.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "write_edit":
       return joinLines([
         `Write or edit: ${request.rough_prompt}`,
         compactContext ? `Source/context: ${compactContext}` : null,
-        "Preserve the user's facts and intent. Make audience, channel, tone, desired action, length, and output format explicit where missing. Do not invent commitments or details.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "practical_plan":
       return joinLines([
         `Create a practical plan for: ${request.rough_prompt}`,
         compactContext ? `Current situation/context: ${compactContext}` : null,
-        "Use the user's constraints and resources. Prioritize the next 3-5 actions, call out risks or assumptions, include decision points, and end with the first concrete step.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
     case "general_task":
@@ -321,7 +320,7 @@ export function buildRouterFallback(request: CompilePromptRequest, decision: Rou
       return joinLines([
         `Task: ${request.rough_prompt}`,
         compactContext ? `Use this observed context only where relevant: ${compactContext}` : null,
-        "Make the request clear and actionable. Preserve intent, add only the missing output shape or constraint that prevents ambiguity, and state assumptions when needed.",
+        ...buildContractSlots(request, decision),
         safetyLine
       ]);
   }
@@ -688,9 +687,9 @@ function truncate(value: string, maxLength: number): string {
 function buildReferenceWorkflowLine(roughPrompt: string): string {
   const tool = detectReferenceToolName(roughPrompt);
   if (tool) {
-    return `Use ${tool} first as the reference source: search for relevant screens, sections, examples, or docs; inspect returned evidence; and extract reusable patterns without copying proprietary UI exactly.`;
+    return `Reference contract: Use ${tool} first as the reference source: search for relevant screens, sections, examples, or docs; inspect returned evidence; and extract reusable patterns without copying proprietary UI exactly.`;
   }
-  return "Use relevant UI references first: gather 3-5 product screens or sections, inspect them for reusable patterns, and avoid copying proprietary UI exactly.";
+  return "Reference contract: use relevant UI references first: gather 3-5 product screens or sections, inspect them for reusable patterns, and avoid copying proprietary UI exactly.";
 }
 
 function detectReferenceToolName(roughPrompt: string): string | null {
@@ -712,7 +711,145 @@ function safetyContractLine(primitive: RouterValuePrimitive): string | null {
   return "For high-stakes claims, state uncertainty, avoid pretending to be a professional, recommend qualified expert/source verification where appropriate (doctor/clinician, lawyer, financial professional, or emergency help), and do not invent legal, medical, financial, or safety facts.";
 }
 
+function buildContractSlots(request: CompilePromptRequest, decision: RouterDecision): string[] {
+  switch (decision.pattern) {
+    case "ui_redesign":
+      return [
+        buildReferenceWorkflowLine(request.rough_prompt),
+        buildStyleReferenceLine(request.rough_prompt),
+        broadUiScopeLine(request.rough_prompt),
+        "Decision contract: extract concrete visual decisions before editing: typography scale, spacing rhythm, palette, density, controls, and empty/preview states.",
+        "Implementation contract: inspect the Electron renderer/components/styles, preserve current behavior, then apply the redesign across the identified surfaces.",
+        "Done contract means: updated UI code/styles, a design-decision summary with references used, and tests plus screenshot or visual check."
+      ].filter((slot): slot is string => Boolean(slot));
+    case "tool_workflow":
+      return [
+        "Source contract: run or inspect the named tool/source first, not after drafting the answer.",
+        "Extraction contract: pull out the facts, examples, constraints, decisions, or reference patterns that should shape the deliverable.",
+        "Deliverable contract: tie the final answer or implementation directly to what the tool/source showed; cite or summarize references when useful.",
+        "Boundary contract: do not invent tool results, credentials, unavailable files, or source-backed claims."
+      ];
+    case "research_compare":
+      return [
+        "Scope contract: define the research question, inclusion/exclusion boundaries, and comparison dimensions before answering.",
+        "Evidence contract: use current primary sources for volatile claims; include dates and separate evidence from interpretation.",
+        "Synthesis contract: compare the strongest options across the chosen dimensions, then state the recommendation or key takeaways.",
+        "Caveat contract: call out uncertainty, missing data, and what would change the conclusion."
+      ];
+    case "decision_matrix":
+      return [
+        "Decision contract: name the options, decision criteria, constraints, and weighting that matter here.",
+        "Tradeoff contract: compare each option against the criteria instead of giving generic pros and cons.",
+        "Recommendation contract: recommend one path, explain why, and state what new information would change the answer.",
+        "Output contract: make the decision easy to scan, with assumptions separated from the recommendation."
+      ];
+    case "agent_fix":
+      return [
+        "Discovery contract: inspect the existing product flow and nearby code before editing; infer the intended behavior from existing patterns.",
+        "Acceptance contract: define the smallest useful implementation slice and concrete acceptance criteria before making changes.",
+        "Implementation contract: make the scoped change without unrelated refactors or behavior drift.",
+        "Verification contract: verify with the closest tests/checks or explain why not, then summarize changed files and evidence."
+      ];
+    case "debug_root_cause":
+      return [
+        "Evidence contract: treat logs, stack traces, screenshots, and visible context as the starting evidence.",
+        "Reproduction contract: reproduce or inspect the failing path before changing code.",
+        "Root cause contract: identify why the failure happens, then apply the narrowest fix if appropriate.",
+        "Verification contract: verify against the exact failure or closest available check and summarize cause, fix, and proof."
+      ];
+    case "extract_schema":
+      return [
+        "Schema contract: define a stable output shape with clear field names and types.",
+        "Fidelity contract: preserve source meaning and structure; do not infer unsupported fields or add outside facts.",
+        "Missing-value contract: use null or an explicit empty value for missing fields instead of guessing.",
+        "Output contract: return structured output only, with consistent formatting."
+      ];
+    case "summarize_translate":
+      return [
+        "Fidelity contract: preserve key facts, nuance, named entities, numbers, and uncertainty.",
+        "Audience contract: adapt length, language, and level of detail to the requested audience or format.",
+        "Boundary contract: do not add outside information, claims, or interpretation unless asked.",
+        "Output contract: produce the requested summary/translation shape and keep caveats visible."
+      ];
+    case "teach_practice":
+      return [
+        "Level contract: assume the learner is smart but new unless a level is provided.",
+        "Mental model contract: start with the core intuition, then use one concrete example.",
+        "Practice contract: include 2-3 practice questions or checks that reveal understanding.",
+        "Misconception contract: call out likely traps and avoid unnecessary jargon."
+      ];
+    case "marketing_artifact":
+      return [
+        "Positioning contract: specify audience, offer, channel, funnel stage, brand voice, and CTA before drafting.",
+        "Claims contract: do not invent metrics, testimonials, guarantees, customer names, or proof points.",
+        "Variant contract: make the artifact usable for the requested channel, not generic marketing copy.",
+        "Output contract: include the final copy plus any short rationale or assumptions only if useful."
+      ];
+    case "career_artifact":
+      return [
+        "Evidence contract: use only the user's supplied experience, resume, job description, or context as source material.",
+        "Targeting contract: tailor the artifact to the target role/company and the requested format.",
+        "Fabrication contract: do not fabricate credentials, employers, metrics, education, or responsibilities.",
+        "Output contract: return the career artifact in a polished, ready-to-use structure."
+      ];
+    case "creative_brief":
+      return [
+        "Generation contract: produce a useful number of options and vary them across clear diversity axes.",
+        "Constraint contract: respect style boundaries, audience, product context, and any forbidden directions.",
+        "Selection contract: include a one-line rationale and mark the strongest options.",
+        "Freshness contract: avoid obvious generic ideas unless explicitly requested."
+      ];
+    case "image_generation_prompt":
+      return [
+        "Visual contract: specify subject, composition, medium, style, color/light, and key details.",
+        "Constraint contract: include framing, negative constraints, aspect ratio, and what must be avoided when relevant.",
+        "Coherence contract: remove contradictory style instructions and keep the image prompt internally consistent.",
+        "Output contract: return one clean image prompt, plus optional negative prompt only when useful."
+      ];
+    case "reply_draft":
+      return [
+        "Audience contract: infer the recipient, channel, and relationship from context when available.",
+        "Intent contract: state the reply's purpose before drafting: answer, decline, ask, confirm, apologize, or follow up.",
+        "Tone contract: match the likely tone and keep commitments conservative.",
+        "Output contract: do not invent facts or obligations; return only the reply draft."
+      ];
+    case "write_edit":
+      return [
+        "Intent contract: preserve the user's facts, goal, and meaning before changing style.",
+        "Audience contract: make audience, channel, tone, desired action, length, and output format explicit where missing.",
+        "Boundary contract: do not invent commitments, facts, claims, or preferences.",
+        "Output contract: return the polished artifact in a ready-to-use form."
+      ];
+    case "practical_plan":
+      return [
+        "Situation contract: identify the goal, constraints, resources, timeline, and unknowns.",
+        "Plan contract: prioritize the next 3-5 actions in sequence with decision points.",
+        "Risk contract: call out risks, assumptions, and what would change the plan.",
+        "Action contract: end with the first concrete step."
+      ];
+    case "general_task":
+    default:
+      return [
+        "Intent contract: preserve the user's exact goal and any explicit constraints.",
+        "Missing-slot contract: add only the output shape, evidence, audience, or acceptance criterion that prevents ambiguity.",
+        "Boundary contract: do not invent facts, preferences, tools, files, or source material.",
+        "Output contract: make the request actionable and state assumptions only when necessary."
+      ];
+  }
+}
+
 function isUiRedesignRequest(text: string): boolean {
   if (/\bscreen\s+ocr\b/i.test(text)) return false;
-  return UI_SURFACE_RE.test(text) && UI_DESIGN_ACTION_RE.test(text);
+  if (UI_SURFACE_RE.test(text) && UI_DESIGN_ACTION_RE.test(text)) return true;
+  return DESIGN_REFERENCE_TOOL_RE.test(text) && UI_DESIGN_ACTION_RE.test(text) && !isVolatileFactRequest(text);
+}
+
+function buildStyleReferenceLine(roughPrompt: string): string | null {
+  if (!/\b(whisper flow|wispr flow|willow)\b/i.test(roughPrompt)) return null;
+  return "Style contract: translate the requested Whisper/Wispr Flow-style direction into concrete UI rules: quiet typography, restrained palette, generous spacing, low-friction controls, and calm status/permission states.";
+}
+
+function broadUiScopeLine(roughPrompt: string): string | null {
+  if (!/\beverything|all\b/i.test(roughPrompt)) return null;
+  return "Scope contract: treat broad wording like \"everything\" as all primary visible app surfaces and states; identify those surfaces before editing.";
 }

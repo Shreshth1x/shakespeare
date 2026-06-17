@@ -85,6 +85,7 @@ test("router turns Mobbin UI redesign asks into concrete reference-driven redesi
   assert.equal(routed.decision.pattern, "ui_redesign");
   assert.equal(routed.decision.failureMode, "missing_reference_workflow");
   assert.equal(routed.decision.outputBudgetTokens, 360);
+  assert(routed.packet.contract.length >= 4);
   expectOverhaulMetadata(routed.decision, "ui_redesign_reference", "reference_extraction");
   assert.match(routed.fallback, /Use mobbin mcp first/i);
   assert.match(routed.fallback, /Extract concrete visual decisions/i);
@@ -92,6 +93,35 @@ test("router turns Mobbin UI redesign asks into concrete reference-driven redesi
   assert.match(routed.fallback, /Electron renderer/i);
   assert.match(routed.fallback, /screenshot|visual check/i);
   assert.doesNotMatch(routed.fallback, /^Goal:/);
+});
+
+test("router treats typo-heavy broad Mobbin style prompts as UI redesign, not generic tool workflow", () => {
+  const routed = buildRoutedPrompt({
+    rough_prompt: "i want to redeseign everything to look whisper flow style using mobbin mcp",
+    mode: "coding_agent",
+    optimization_mode: "speed",
+    context: {
+      active_app: "Codex",
+      window_title: "Codex",
+      detected_target: "Codex",
+      selected_text: "i want to redeseign everything to look whisper flow style using mobbin mcp"
+    }
+  });
+
+  assert.equal(routed.decision.target, "codex");
+  assert.equal(routed.decision.mode, "coding_agent");
+  assert.equal(routed.decision.pattern, "ui_redesign");
+  assert.equal(routed.decision.archetype, "ui_redesign_reference");
+  assert.equal(routed.decision.valuePrimitive, "reference_extraction");
+  assert.equal(routed.decision.failureMode, "missing_reference_workflow");
+  assert(routed.packet.contract.length >= 4);
+  assert(routed.packet.contract.some((slot) => /Whisper\/Wispr Flow-style/i.test(slot)));
+  assert.doesNotMatch(routed.fallback, /^Use mobbin mcp as the required source/i);
+  assert.match(routed.fallback, /Redesign the current app UI/i);
+  assert.match(routed.fallback, /all primary visible app surfaces and states/i);
+  assert.match(routed.fallback, /Whisper\/Wispr Flow-style/i);
+  assert.match(routed.fallback, /typography scale/i);
+  assert.match(routed.fallback, /screenshot|visual check/i);
 });
 
 test("router lets Gmail and Slack override the default coding mode", () => {
@@ -465,6 +495,12 @@ test("router exposes all 15 archetype fallback contracts", () => {
     if (missingSignals.length) {
       failures.push(`${fixture.name}: fallback missing ${missingSignals.join(", ")}`);
     }
+    if (routed.packet.contract.length < 4) {
+      failures.push(`${fixture.name}: expected at least 4 packet contract slots, got ${routed.packet.contract.length}`);
+    }
+    if ((routed.fallback.match(/\b(?:contract|Done means)\b/g) ?? []).length < 4) {
+      failures.push(`${fixture.name}: expected fallback to expose at least 4 concrete contract lines`);
+    }
   }
 
   assert.deepEqual(failures, []);
@@ -555,5 +591,8 @@ test("model packet includes overhaul metadata for archetype and value primitive"
   assert.equal(packet.failure_mode, "missing_reference_workflow");
   assert.equal(packet.rough_prompt, request.rough_prompt);
   assert.equal(packet.target, "codex");
+  assert(Array.isArray(packet.contract));
+  assert((packet.contract as unknown[]).length >= 4);
+  assert((packet.contract as string[]).some((slot) => /typography|spacing|palette/i.test(slot)));
   assert.equal(typeof packet.context === "string" || packet.context === undefined, true);
 });

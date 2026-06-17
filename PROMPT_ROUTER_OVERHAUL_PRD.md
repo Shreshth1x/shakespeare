@@ -2,6 +2,20 @@
 
 Date: 2026-06-16
 
+## 0. Decision TLDR
+
+Yes, this style of thinking applies to almost every prompt.
+
+No, it does not mean every prompt gets the same template.
+
+The universal move is:
+
+> Classify the work, identify the likely expensive failure, then add the smallest missing work contract that prevents it.
+
+For the Mobbin/UI example, the missing contract is reference extraction plus visual verification. For research it is evidence, dates, and caveats. For writing it is audience, tone, channel, and commitment boundaries. For extraction it is schema and null policy. For decisions it is criteria, tradeoffs, and a recommendation rule.
+
+The router should therefore optimize by archetype, not by generic "make this clearer" prompting.
+
 ## 1. Summary
 
 The Prompt Router Overhaul replaces Shakespeare's generic "make this prompt clearer" behavior with an archetype-based router that optimizes prompts by adding the smallest missing work contract.
@@ -11,6 +25,20 @@ The central product shift:
 > Shakespeare should not make prompts sound more professional. It should make the first AI run materially less likely to waste time.
 
 The current router already supports latency-aware routing and a `ui_redesign` pattern, but the deeper product should generalize that approach across the major prompt categories people actually use: writing, practical guidance, information seeking, decision support, coding, research, extraction, learning, marketing, job/career work, creative generation, and tool/reference workflows.
+
+```mermaid
+flowchart LR
+  A["Rough prompt"] --> B["Detect target and work type"]
+  B --> C["Find likely expensive failure"]
+  C --> D["Select value primitive"]
+  D --> E["Emit 4+ contract slots"]
+  E --> F["Compact model packet"]
+  E --> G["Deterministic fallback"]
+  F --> H["Fast model rewrite"]
+  G --> I["Race against 1.5s deadline"]
+  H --> I
+  I --> J["Paste best available prompt"]
+```
 
 ## 2. Why This Overhaul Exists
 
@@ -135,6 +163,40 @@ Examples:
 - UI redesign prompt: missing reference extraction and visual verification.
 - Marketing prompt: missing audience, offer, brand voice, channel, CTA, compliance guardrails.
 - Career prompt: missing target role, resume constraints, no-fabrication rule.
+
+## 4.1 Latency And Model Answer
+
+The 1.5 second goal is possible only if prompt optimization is mostly local.
+
+The Speed path must not do deep research, prompt search, multi-candidate generation, self-consistency, or tool calls inline. Those belong in Quality mode, Max Quality, or offline eval improvement.
+
+The Speed path should be:
+
+1. Deterministic local router in the app.
+2. Deterministic fallback compiled synchronously.
+3. Compact packet to the model containing `target`, `archetype`, `value_primitive`, `failure_mode`, `rough_prompt`, compact context, and `contract` slots.
+4. One fast model call, raced against the local fallback.
+5. Paste fallback if the model misses the deadline.
+
+As of 2026-06-16, OpenAI's model docs identify GPT-5.4 mini and GPT-5.4 nano as the lower-latency/lower-cost variants for workloads where speed matters, while GPT-5.5 is the flagship for complex reasoning and coding. Therefore:
+
+- Speed default: `gpt-5.4-nano`.
+- Quality default: `gpt-5.4-mini`.
+- Complex/offline optimization: stronger model such as `gpt-5.5`.
+
+Source: https://developers.openai.com/api/docs/models
+
+The practical latency budget:
+
+| Stage | Target |
+| --- | ---: |
+| Local route + fallback | < 20 ms |
+| Context packet build | < 20 ms |
+| Backend/model deadline | 900-1100 ms |
+| Paste + UI overhead | 150-250 ms |
+| User-visible p95 | < 1500 ms |
+
+This is why the router needs high-quality local fallbacks. The fallback cannot be "good enough boilerplate"; it must already contain the right work contract.
 
 ## 5. Product Definition
 
@@ -700,11 +762,33 @@ Speed mode must remain fast:
 - One model call.
 - Local routing.
 - Pattern packet, not long system prompt.
+- Four or more explicit contract slots in the router packet for every archetype.
 - Output under roughly 180-250 words for most archetypes.
 - Larger cap only for complex archetypes like research, decisions, or UI redesign.
 - Local fallback for every archetype.
 
 Speed does not mean low value. It means the router must know what value to add before the model call.
+
+The model packet should include:
+
+```json
+{
+  "v": 2,
+  "target": "codex",
+  "archetype": "ui_redesign_reference",
+  "value_primitive": "reference_extraction",
+  "mode": "coding_agent",
+  "pattern": "ui_redesign",
+  "failure_mode": "missing_reference_workflow",
+  "rough_prompt": "i want to redeseign everything to look whisper flow style using mobbin mcp",
+  "contract": [
+    "Reference contract: use the named reference source first...",
+    "Style contract: translate the requested style into concrete UI rules...",
+    "Scope contract: identify all primary visible app surfaces and states...",
+    "Done contract means: updated UI code/styles plus screenshot or visual check..."
+  ]
+}
+```
 
 ## 13. Quality Mode Requirements
 
@@ -775,7 +859,7 @@ Secondary metrics:
 
 ### Phase 4: Model Packet Upgrade
 
-- Send `archetype`, `value_primitive`, `failure_mode`, `rough_prompt`, `target`, and compact context.
+- Send `archetype`, `value_primitive`, `failure_mode`, `rough_prompt`, `target`, `contract`, and compact context.
 - Update Speed compiler instructions to say: apply the chosen value primitive, not every best practice.
 
 ### Phase 5: Evals
@@ -864,4 +948,3 @@ The router should not ask, "How can I make this prompt sound better?"
 It should ask:
 
 > What missing contract would prevent the next wasted turn?
-

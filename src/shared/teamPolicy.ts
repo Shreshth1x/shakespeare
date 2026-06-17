@@ -2,6 +2,7 @@ import type { AppSettings, CustomPromptMode, PrivacyControlKey, TeamPolicy, Team
 
 export const PRIVACY_CONTROL_LABELS: Record<PrivacyControlKey, string> = {
   previewEnabled: "Preview before replace",
+  focusedFieldRewriteEnabled: "Focused field rewrite",
   clipboardContextEnabled: "Clipboard context",
   screenContextEnabled: "Screen context",
   browserContextEnabled: "Browser context",

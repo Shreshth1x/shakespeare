@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   optimizationMode: "speed",
   restoreClipboard: true,
   previewEnabled: false,
+  focusedFieldRewriteEnabled: true,
   clipboardContextEnabled: false,
   screenContextEnabled: false,
   browserContextEnabled: false,

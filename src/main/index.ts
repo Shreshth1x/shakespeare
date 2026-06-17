@@ -7,7 +7,7 @@ import { createBrowserContextBridge } from "./browserContextBridge";
 import { createIdeContextBridge } from "./ideContextBridge";
 import { createScreenContextService } from "./screenContext";
 import { SettingsStore, toDashboardState } from "./settings";
-import { captureSelectedText, getActiveWindowContext, pasteReplacement } from "./textReplacement";
+import { captureEditableText, getActiveWindowContext, replaceCapturedText, type EditableTextCapture } from "./textReplacement";
 import { detectTargetTool, isAppDenied } from "../shared/appDetection";
 import { effectiveAppDenylist, findCustomMode } from "../shared/teamPolicy";
 import type {
@@ -22,6 +22,7 @@ import type {
 } from "../shared/types";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const FOCUSED_BROWSER_CONTEXT_MAX_AGE_MS = 10_000;
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -34,7 +35,7 @@ const ideBridge = createIdeContextBridge();
 const screenContext = createScreenContextService();
 let pendingPreview:
   | (PendingPreview & {
-      previousClipboardText: string;
+      capture: EditableTextCapture;
       restoreClipboard: boolean;
       request: CompilePromptRequest;
     })
@@ -188,18 +189,30 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
   const startedAt = Date.now();
 
   try {
-    const selection = await captureSelectedText();
-    if (!selection.selectedText) {
-      throw new Error("No selected text found.");
+    const windowContext = await getActiveWindowContext();
+    if (isAppDenied(windowContext, effectiveAppDenylist(settings))) {
+      throw new Error("This app or window is on your denylist.");
     }
 
-    const windowContext = await getActiveWindowContext();
+    const browserContext = browserBridge.getLatest();
+    const browserContextIsFreshForFocusedField = isRecentBrowserContext(browserContext);
+    const capture = await captureEditableText({
+      allowFocusedField: settings.focusedFieldRewriteEnabled,
+      activeApp: windowContext.active_app,
+      browserFocusedText: browserContextIsFreshForFocusedField ? browserContext?.focusedText : null,
+      browserFocusedTextTruncated: browserContextIsFreshForFocusedField ? browserContext?.focusedTextTruncated : true,
+      browserUrl: browserContextIsFreshForFocusedField ? browserContext?.url : null
+    });
+    if (!capture.text) {
+      throw new Error(settings.focusedFieldRewriteEnabled ? "No selected or focused editable text found." : "No selected text found.");
+    }
+
     const context = buildContext(
       windowContext,
-      selection.selectedText,
-      selection.previousClipboardText,
+      capture.text,
+      capture.previousClipboardText,
       settings,
-      browserBridge.getLatest(),
+      browserContext,
       ideBridge.getLatest(),
       screenContext.getLatest()
     );
@@ -207,7 +220,7 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
       throw new Error("This app or window is on your denylist.");
     }
 
-    const request = buildCompileRequest(selection.selectedText, context, settings);
+    const request = buildCompileRequest(capture.text, context, settings);
 
     const response = await compilePrompt(settings, request);
     store.setLastReceipt(toReceipt(response));
@@ -215,13 +228,13 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
     if (settings.previewEnabled) {
       pendingPreview = {
         id: randomUUID(),
-        roughPrompt: selection.selectedText,
+        roughPrompt: capture.text,
         optimizedPrompt: response.optimized_prompt,
         mode: settings.promptMode,
         optimizationMode: settings.optimizationMode,
         context,
         contextReceipt: toReceipt(response),
-        previousClipboardText: selection.previousClipboardText,
+        capture,
         restoreClipboard: settings.restoreClipboard,
         request
       };
@@ -231,8 +244,10 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
       return { ok: true };
     }
 
-    await pasteReplacement(response.optimized_prompt, selection.previousClipboardText, settings.restoreClipboard);
-    addHistory(selection.selectedText, response.optimized_prompt, response, settings);
+    await replaceCapturedText(capture, response.optimized_prompt, settings.restoreClipboard, {
+      replaceBrowserFocusedText: (text, targetCapture) => browserBridge.replaceFocusedText(text, targetCapture.browserUrl)
+    });
+    addHistory(capture.text, response.optimized_prompt, response, settings);
     store.recordSuccess(Date.now() - startedAt);
     notify("Prompt rewritten", `${settings.optimizationMode === "speed" ? "Speed" : "Quality"} mode finished.`);
     pushState();
@@ -256,7 +271,9 @@ async function acceptPreview(): Promise<{ ok: true } | { ok: false; error: strin
   const settings = store.get();
 
   try {
-    await pasteReplacement(preview.optimizedPrompt, preview.previousClipboardText, preview.restoreClipboard);
+    await replaceCapturedText(preview.capture, preview.optimizedPrompt, preview.restoreClipboard, {
+      replaceBrowserFocusedText: (text, targetCapture) => browserBridge.replaceFocusedText(text, targetCapture.browserUrl)
+    });
     addHistory(preview.roughPrompt, preview.optimizedPrompt, preview.contextReceipt, settings);
     store.recordSuccess(Date.now() - startedAt);
     pendingPreview = null;
@@ -459,4 +476,9 @@ function notify(title: string, body: string): void {
   if (Notification.isSupported()) {
     new Notification({ title, body }).show();
   }
+}
+
+function isRecentBrowserContext(browserContext: ReturnType<typeof browserBridge.getLatest>): boolean {
+  if (!browserContext) return false;
+  return Date.now() - new Date(browserContext.updatedAt).getTime() <= FOCUSED_BROWSER_CONTEXT_MAX_AGE_MS;
 }

@@ -58,6 +58,10 @@ const TEAM_POLICY_TEMPLATE = {
     }
   ],
   privacyControls: {
+    focusedFieldRewriteEnabled: {
+      value: true,
+      locked: false
+    },
     screenContextEnabled: {
       value: false,
       locked: true
@@ -573,6 +577,12 @@ export default function App(): JSX.Element {
             checked={state.settings.previewEnabled}
             disabled={isLocked("previewEnabled")}
             onChange={(previewEnabled) => updateSettings({ previewEnabled })}
+          />
+          <Toggle
+            label={lockedLabel("Focused field rewrite", "focusedFieldRewriteEnabled")}
+            checked={state.settings.focusedFieldRewriteEnabled}
+            disabled={isLocked("focusedFieldRewriteEnabled")}
+            onChange={(focusedFieldRewriteEnabled) => updateSettings({ focusedFieldRewriteEnabled })}
           />
           <Toggle
             label={lockedLabel("Clipboard context", "clipboardContextEnabled")}
@@ -1104,6 +1114,7 @@ function createPreviewApi(): Window["shakespeare"] {
       optimizationMode: "speed",
       restoreClipboard: true,
       previewEnabled: false,
+      focusedFieldRewriteEnabled: true,
       clipboardContextEnabled: false,
       screenContextEnabled: false,
       browserContextEnabled: false,

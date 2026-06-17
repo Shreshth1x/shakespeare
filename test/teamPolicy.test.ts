@@ -14,6 +14,7 @@ const baseSettings: AppSettings = {
   optimizationMode: "speed",
   restoreClipboard: true,
   previewEnabled: false,
+  focusedFieldRewriteEnabled: true,
   clipboardContextEnabled: true,
   screenContextEnabled: true,
   browserContextEnabled: true,

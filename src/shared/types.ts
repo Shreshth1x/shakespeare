@@ -206,6 +206,7 @@ export interface AppSettings {
   optimizationMode: OptimizationMode;
   restoreClipboard: boolean;
   previewEnabled: boolean;
+  focusedFieldRewriteEnabled: boolean;
   clipboardContextEnabled: boolean;
   screenContextEnabled: boolean;
   browserContextEnabled: boolean;
@@ -231,6 +232,7 @@ export interface CustomPromptModeInput {
 
 export type PrivacyControlKey =
   | "previewEnabled"
+  | "focusedFieldRewriteEnabled"
   | "clipboardContextEnabled"
   | "screenContextEnabled"
   | "browserContextEnabled"
@@ -298,6 +300,7 @@ export interface BrowserContextSnapshot {
   hostname: string;
   selectedText: string;
   focusedText: string;
+  focusedTextTruncated?: boolean;
   visibleText: string;
   updatedAt: string;
   source: "browser_extension";

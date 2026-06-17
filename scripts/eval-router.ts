@@ -25,6 +25,7 @@ interface Failure {
   actualPattern: RouterPattern;
   actualPrimitive: RouterValuePrimitive;
   missingSignals: string[];
+  contractSlotCount: number;
   fallback: string;
 }
 
@@ -35,6 +36,7 @@ const durations: number[] = [];
 const roughLengths: number[] = [];
 const packetLengths: number[] = [];
 const fallbackLengths: number[] = [];
+const contractSlotCounts: number[] = [];
 const byCategory = new Map<string, { total: number; archetype: number; pattern: number; primitive: number; contract: number }>();
 
 for (const fixture of fixtures) {
@@ -50,6 +52,7 @@ for (const fixture of fixtures) {
   roughLengths.push(fixture.roughPrompt.length);
   packetLengths.push(routed.packetText.length);
   fallbackLengths.push(routed.fallback.length);
+  contractSlotCounts.push(routed.packet.contract.length);
 
   const missingSignals = fixture.contractSignals
     .filter((signal) => !signal.test(routed.fallback))
@@ -73,7 +76,8 @@ for (const fixture of fixtures) {
     actual.archetype !== fixture.expectedArchetype ||
     actual.pattern !== fixture.expectedPattern ||
     actual.primitive !== fixture.expectedPrimitive ||
-    missingSignals.length
+    missingSignals.length ||
+    routed.packet.contract.length < 4
   ) {
     failures.push({
       fixture,
@@ -81,6 +85,7 @@ for (const fixture of fixtures) {
       actualPattern: actual.pattern,
       actualPrimitive: actual.primitive,
       missingSignals,
+      contractSlotCount: routed.packet.contract.length,
       fallback: routed.fallback
     });
   }
@@ -107,6 +112,9 @@ console.log(
 console.log(
   `Fallback length: p50=${Math.round(percentile(fallbackLengths, 50))} chars p95=${Math.round(percentile(fallbackLengths, 95))} chars max=${Math.max(...fallbackLengths)} chars`
 );
+console.log(
+  `Contract slots: p50=${Math.round(percentile(contractSlotCounts, 50))} p95=${Math.round(percentile(contractSlotCounts, 95))} min=${Math.min(...contractSlotCounts)}`
+);
 console.log("By category:");
 for (const [category, bucket] of [...byCategory.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
   console.log(
@@ -122,6 +130,9 @@ if (failures.length) {
     );
     if (failure.missingSignals.length) {
       console.error(`  missing contract signals: ${failure.missingSignals.join(", ")}`);
+    }
+    if (failure.contractSlotCount < 4) {
+      console.error(`  contract slots too shallow: ${failure.contractSlotCount}`);
     }
   }
   process.exitCode = 1;
@@ -459,6 +470,7 @@ function buildFixtures(): RouterFixture[] {
     ]),
     ...fixture("ui_redesign_reference", "ui_redesign_reference", "ui_redesign", "reference_extraction", [/Use .*first/i, /typography/i, /spacing/i, /palette/i, /screenshot|visual check/i], [
       "use the mobbin mcp to redesign the electron app UI to be like whisper flow style of clean typography and colors",
+      "i want to redeseign everything to look whisper flow style using mobbin mcp",
       "use Mobbin references to restyle the settings dashboard",
       "redesign this frontend using Mobbin screens for clean SaaS typography",
       "use Figma as inspiration and polish the renderer UI",
