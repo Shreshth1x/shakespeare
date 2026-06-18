@@ -19,7 +19,7 @@ export async function compilePrompt(settings: AppSettings, request: CompilePromp
       ...(settings.clientToken ? { Authorization: `Bearer ${settings.clientToken}` } : {})
     },
     body: JSON.stringify(request),
-    signal: AbortSignal.timeout(request.optimization_mode === "speed" ? 1500 : 3200)
+    signal: AbortSignal.timeout(requestTimeoutMs(request.optimization_mode))
   });
 
   const body = (await response.json()) as CompilePromptResponse | { error?: string };
@@ -28,6 +28,13 @@ export async function compilePrompt(settings: AppSettings, request: CompilePromp
   }
 
   return body as CompilePromptResponse;
+}
+
+function requestTimeoutMs(mode: CompilePromptRequest["optimization_mode"]): number {
+  // Screen rewrites run as max_quality over a large OCR payload, so they need a longer deadline.
+  if (mode === "speed") return 1500;
+  if (mode === "max_quality") return 12000;
+  return 3200;
 }
 
 function trimSlash(value: string): string {

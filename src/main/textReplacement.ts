@@ -113,6 +113,20 @@ export async function pasteReplacement(text: string, previousClipboardText: stri
   }
 }
 
+/**
+ * Paste a rewrite into a terminal/TUI (e.g. Claude Code) where there is no selectable or
+ * accessible text field. The unified rewrite flow has already sent Ctrl+C while probing for a
+ * selection, which clears the TUI's draft line, so this only pastes — sending another Ctrl+C
+ * here risks tripping the terminal's "press Ctrl+C twice to exit". The rewrite is left on the
+ * clipboard so the user can paste it manually if the terminal swallows the paste.
+ */
+export async function replaceTerminalInput(text: string): Promise<void> {
+  clipboard.writeText(text);
+  await wait(60);
+  await sendShortcut("paste");
+  await wait(220);
+}
+
 export async function replaceCapturedText(
   capture: EditableTextCapture,
   text: string,

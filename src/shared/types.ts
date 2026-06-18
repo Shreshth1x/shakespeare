@@ -218,7 +218,6 @@ export interface AppSettings {
   ideContextEnabled: boolean;
   localHistoryEnabled: boolean;
   appDenylist: string[];
-  teamPolicy: TeamPolicy | null;
   stats: UsageStats;
 }
 
@@ -235,29 +234,6 @@ export interface CustomPromptModeInput {
   instructions: string;
 }
 
-export type PrivacyControlKey =
-  | "previewEnabled"
-  | "focusedFieldRewriteEnabled"
-  | "clipboardContextEnabled"
-  | "screenContextEnabled"
-  | "browserContextEnabled"
-  | "ideContextEnabled"
-  | "localHistoryEnabled"
-  | "restoreClipboard";
-
-export interface TeamPrivacyControl {
-  value: boolean;
-  locked: boolean;
-}
-
-export interface TeamPolicy {
-  teamName: string;
-  updatedAt: string;
-  sharedModes: CustomPromptMode[];
-  privacyControls: Partial<Record<PrivacyControlKey, TeamPrivacyControl>>;
-  appDenylist: string[];
-  lockAppDenylist: boolean;
-}
 
 export interface ContextReceipt {
   context_used: string[];

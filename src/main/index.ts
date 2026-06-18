@@ -5,11 +5,11 @@ import { randomUUID } from "node:crypto";
 import { compilePrompt, checkBackend } from "./backendClient";
 import { createBrowserContextBridge } from "./browserContextBridge";
 import { createIdeContextBridge } from "./ideContextBridge";
-import { createScreenContextService } from "./screenContext";
+import { createScreenContextService, type ScreenFrame } from "./screenContext";
 import { SettingsStore, toDashboardState } from "./settings";
-import { captureEditableText, getActiveWindowContext, replaceCapturedText, type EditableTextCapture } from "./textReplacement";
+import { captureEditableText, getActiveWindowContext, replaceCapturedText, replaceTerminalInput, type EditableTextCapture } from "./textReplacement";
 import { detectTargetTool, isAppDenied } from "../shared/appDetection";
-import { effectiveAppDenylist, findCustomMode } from "../shared/teamPolicy";
+import { findCustomMode } from "../shared/customModes";
 import type {
   AppSettings,
   CompilePromptRequest,
@@ -23,9 +23,6 @@ import type {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FOCUSED_BROWSER_CONTEXT_MAX_AGE_MS = 10_000;
-const SCREEN_CONTEXT_MAX_AGE_MS = 30_000;
-const SCREEN_CONTEXT_PROMPT_RE =
-  /\b(this|that|these|those|screen|visible|shown|screenshot|image|logo|design|mockup|ui|layout|look|looks|cool|good|visual)\b/i;
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -79,7 +76,7 @@ function createWindow(): void {
     title: "Shakespeare",
     backgroundColor: "#f6f8f4",
     webPreferences: {
-      preload: join(__dirname, "../preload/index.js"),
+      preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -102,7 +99,7 @@ function createTray(): void {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: "Open Shakespeare", click: () => mainWindow?.show() },
-      { label: "Rewrite selection", click: () => void rewriteSelection() },
+      { label: "Rewrite", click: () => void rewriteSelection() },
       { type: "separator" },
       { label: "Quit", click: () => app.quit() }
     ])
@@ -193,9 +190,15 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
 
   try {
     const windowContext = await getActiveWindowContext();
-    if (isAppDenied(windowContext, effectiveAppDenylist(settings))) {
+    if (isAppDenied(windowContext, settings.appDenylist)) {
       throw new Error("This app or window is on your denylist.");
     }
+
+    // Grab a lightweight screen frame BEFORE the selection probe (cheap — pixels only, no OCR). The
+    // probe sends Ctrl+C, which in a terminal/TUI (e.g. Claude Code) clears the draft, so we must
+    // snapshot pixels first. We only pay for the expensive OCR + screen rewrite below if the probe
+    // finds no selectable text — so normal selection rewrites stay fast.
+    const screenFrame = settings.screenContextEnabled ? await captureScreenFrameSafely() : null;
 
     const browserContext = browserBridge.getLatest();
     const browserContextIsFreshForFocusedField = isRecentBrowserContext(browserContext);
@@ -206,11 +209,23 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
       browserFocusedTextTruncated: browserContextIsFreshForFocusedField ? browserContext?.focusedTextTruncated : true,
       browserUrl: browserContextIsFreshForFocusedField ? browserContext?.url : null
     });
+
     if (!capture.text) {
-      throw new Error(settings.focusedFieldRewriteEnabled ? "No selected or focused editable text found." : "No selected text found.");
+      // No selectable/focused text (terminals, TUIs like Claude Code) — now do the OCR and rewrite
+      // from the frame we captured before the probe.
+      if (screenFrame) {
+        const snapshot = await ocrScreenFrameSafely(screenFrame);
+        if (snapshot && snapshot.text.trim()) {
+          return await rewriteFromScreen(settings, snapshot, startedAt);
+        }
+      }
+      throw new Error(
+        settings.screenContextEnabled
+          ? "No selected text and no readable screen text found."
+          : "No selected text found. Turn on Screen context to rewrite terminals and apps without a selection."
+      );
     }
 
-    const screenSnapshot = await screenSnapshotForRewrite(settings, capture.text);
     const context = buildContext(
       windowContext,
       capture.text,
@@ -218,9 +233,9 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
       settings,
       browserContext,
       ideBridge.getLatest(),
-      screenSnapshot
+      null
     );
-    if (isAppDenied(context, effectiveAppDenylist(settings))) {
+    if (isAppDenied(context, settings.appDenylist)) {
       throw new Error("This app or window is on your denylist.");
     }
 
@@ -260,6 +275,62 @@ async function rewriteSelection(): Promise<{ ok: true } | { ok: false; error: st
     store.recordFailure();
     const message = error instanceof Error ? error.message : "Rewrite failed.";
     notify("Rewrite failed", message);
+    pushState();
+    return { ok: false, error: message };
+  }
+}
+
+const SCREEN_REWRITE_MODE_NAME = "Screen rewrite";
+const SCREEN_REWRITE_INSTRUCTIONS =
+  "The user pressed the screen-rewrite hotkey while working in a terminal/TUI, usually the Claude Code CLI. " +
+  "The text you are given is OCR of their entire screen. Find the user's most recent draft prompt — the instruction they are composing in the input box, usually the last editable line near the bottom — and rewrite ONLY that draft into a single precise, specific, agent-ready instruction. " +
+  "Ground it in the visible terminal context: reference the actual file paths, error messages, failing tests, commands, and symbols shown on screen so the rewrite is concrete rather than generic. " +
+  "Do not describe or summarize the screen, do not add commentary, and do not wrap the result in quotes or code fences. Output only the rewritten prompt.";
+
+async function rewriteFromScreen(
+  settings: AppSettings,
+  snapshot: NonNullable<ReturnType<typeof screenContext.getLatest>>,
+  startedAt: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    if (!backendHealthy) {
+      backendHealthy = await checkBackend(settings);
+    }
+
+    const screenText = snapshot.text.trim();
+    if (!screenText) {
+      throw new Error(snapshot.warning ?? "No readable text was found on screen.");
+    }
+
+    const request: CompilePromptRequest = {
+      rough_prompt: screenText,
+      mode: "custom",
+      optimization_mode: "max_quality",
+      custom_mode: { name: SCREEN_REWRITE_MODE_NAME, instructions: SCREEN_REWRITE_INSTRUCTIONS },
+      context: {
+        active_app: "Terminal",
+        window_title: snapshot.sourceName,
+        detected_target: "Terminal"
+      }
+    };
+
+    const response = await compilePrompt(settings, request);
+    const optimized = response.optimized_prompt.trim();
+    if (!optimized) {
+      throw new Error("The model returned an empty rewrite.");
+    }
+
+    store.setLastReceipt(toReceipt(response));
+    await replaceTerminalInput(optimized);
+    addHistory("(screen draft)", optimized, response, settings);
+    store.recordSuccess(Date.now() - startedAt);
+    notify("Prompt rewritten from screen", "Pasted into your terminal (also copied to clipboard).");
+    pushState();
+    return { ok: true };
+  } catch (error) {
+    store.recordFailure();
+    const message = error instanceof Error ? error.message : "Screen rewrite failed.";
+    notify("Screen rewrite failed", message);
     pushState();
     return { ok: false, error: message };
   }
@@ -482,27 +553,26 @@ function notify(title: string, body: string): void {
   }
 }
 
-async function screenSnapshotForRewrite(settings: AppSettings, promptText: string) {
-  const latest = screenContext.getLatest();
-  if (!settings.screenContextEnabled || !shouldRefreshScreenContext(promptText, latest)) {
-    return latest;
-  }
-
+async function captureScreenFrameSafely(): Promise<ScreenFrame | null> {
   try {
-    const snapshot = await screenContext.capture();
-    pushState();
-    return snapshot;
+    return await screenContext.captureFrame();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Screen capture failed.";
     notify("Screen context failed", message);
-    return latest;
+    return null;
   }
 }
 
-function shouldRefreshScreenContext(promptText: string, latest: ReturnType<typeof screenContext.getLatest>): boolean {
-  if (!SCREEN_CONTEXT_PROMPT_RE.test(promptText)) return false;
-  if (!latest) return true;
-  return Date.now() - new Date(latest.capturedAt).getTime() > SCREEN_CONTEXT_MAX_AGE_MS;
+async function ocrScreenFrameSafely(frame: ScreenFrame): Promise<ReturnType<typeof screenContext.getLatest>> {
+  try {
+    const snapshot = await screenContext.ocrFrame(frame);
+    pushState();
+    return snapshot;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Screen read failed.";
+    notify("Screen context failed", message);
+    return null;
+  }
 }
 
 function isRecentBrowserContext(browserContext: ReturnType<typeof browserBridge.getLatest>): boolean {

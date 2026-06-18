@@ -24,7 +24,6 @@ This matrix tracks the MVP surfaces from `CONTEXT_AWARE_PROMPT_COMPILER_PRD.md`.
 | Terminal | zsh integration implemented | PowerShell PSReadLine integration implemented; manual Windows Terminal QA required | Current prompt buffer is rewritten where shell integration is installed. |
 | Clipboard preservation | Covered by tests and manual app flow | Covered by tests and manual app flow | Original clipboard is restored when the setting is enabled. |
 | Privacy controls | Covered by tests and UI manual QA | Covered by tests and UI manual QA | Clipboard, screen, browser, IDE, and history context stay disabled unless enabled. |
-| Team policy locks | Covered by unit tests and UI manual QA | Covered by unit tests and UI manual QA | Locked privacy and denylist controls cannot be overridden locally. |
 | Speed latency | Instrumented in dashboard | Instrumented in dashboard | Speed mode should stay under 2 seconds p95 for selected-text-only prompts with a warm backend. |
 
 ## Release Credential Checklist

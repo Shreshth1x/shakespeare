@@ -1,7 +1,7 @@
 import { app } from "electron";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { applyTeamPolicy, normalizeCustomModes, normalizeTeamPolicy } from "../shared/teamPolicy";
+import { normalizeCustomModes } from "../shared/customModes";
 import type {
   AppSettings,
   BrowserContextSnapshot,
@@ -11,8 +11,7 @@ import type {
   IdeContextSnapshot,
   PendingPreview,
   PromptMode,
-  ScreenContextSnapshot,
-  TeamPolicy
+  ScreenContextSnapshot
 } from "../shared/types";
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -33,7 +32,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   ideContextEnabled: false,
   localHistoryEnabled: false,
   appDenylist: [],
-  teamPolicy: null,
   stats: {
     promptsEnhanced: 0,
     acceptedRewrites: 0,
@@ -71,26 +69,23 @@ export class SettingsStore {
 
   update(patch: Partial<AppSettings>): AppSettings {
     const customModes = normalizeCustomModes(patch.customModes ?? this.settings.customModes);
-    const teamPolicy = patch.teamPolicy !== undefined ? normalizeTeamPolicy(patch.teamPolicy) : this.settings.teamPolicy;
     const activeCustomModeId = normalizeActiveCustomModeId(
       patch.activeCustomModeId !== undefined ? patch.activeCustomModeId : this.settings.activeCustomModeId,
-      customModes,
-      teamPolicy
+      customModes
     );
     const promptMode = normalizePromptMode(patch.promptMode ?? this.settings.promptMode, activeCustomModeId);
-    this.settings = applyTeamPolicy({
+    this.settings = {
       ...this.settings,
       ...patch,
       promptMode: promptMode === "custom" && !activeCustomModeId ? DEFAULT_SETTINGS.promptMode : promptMode,
       activeCustomModeId,
       customModes,
-      teamPolicy,
-      appDenylist: teamPolicy?.lockAppDenylist ? this.settings.appDenylist : (patch.appDenylist ?? this.settings.appDenylist),
+      appDenylist: patch.appDenylist ?? this.settings.appDenylist,
       stats: {
         ...this.settings.stats,
         ...(patch.stats ?? {})
       }
-    });
+    };
     this.save();
     return this.get();
   }
@@ -173,23 +168,21 @@ export class SettingsStore {
       const parsed = JSON.parse(readFileSync(this.filePath, "utf8")) as Partial<StoreFile> & Partial<AppSettings>;
       const rawSettings = parsed.settings ?? parsed;
       const customModes = normalizeCustomModes(rawSettings.customModes);
-      const teamPolicy = normalizeTeamPolicy(rawSettings.teamPolicy);
-      const activeCustomModeId = normalizeActiveCustomModeId(rawSettings.activeCustomModeId, customModes, teamPolicy);
+      const activeCustomModeId = normalizeActiveCustomModeId(rawSettings.activeCustomModeId, customModes);
       const promptMode = normalizePromptMode(rawSettings.promptMode, activeCustomModeId);
       return {
-        settings: applyTeamPolicy({
+        settings: {
           ...DEFAULT_SETTINGS,
           ...rawSettings,
           promptMode,
           activeCustomModeId,
           customModes,
-          teamPolicy,
           appDenylist: rawSettings.appDenylist ?? DEFAULT_SETTINGS.appDenylist,
           stats: {
             ...DEFAULT_SETTINGS.stats,
             ...(rawSettings.stats ?? {})
           }
-        }),
+        },
         history: Array.isArray(parsed.history) ? parsed.history.slice(0, 25) : [],
         lastReceipt: parsed.lastReceipt ?? null
       };
@@ -219,10 +212,10 @@ export class SettingsStore {
   }
 }
 
-function normalizeActiveCustomModeId(input: unknown, customModes: AppSettings["customModes"], teamPolicy: TeamPolicy | null): string | null {
+function normalizeActiveCustomModeId(input: unknown, customModes: AppSettings["customModes"]): string | null {
   if (typeof input !== "string" || !input.trim()) return null;
   const id = input.trim();
-  return customModes.some((mode) => mode.id === id) || teamPolicy?.sharedModes.some((mode) => mode.id === id) ? id : null;
+  return customModes.some((mode) => mode.id === id) ? id : null;
 }
 
 function normalizePromptMode(input: unknown, activeCustomModeId: string | null): PromptMode {

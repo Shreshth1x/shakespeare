@@ -121,7 +121,7 @@ async function compileLegacyWithModel(request: CompilePromptRequest): Promise<Co
       reasoning: { effort: request.optimization_mode === "max_quality" ? "medium" : "low" },
       max_output_tokens: request.optimization_mode === "quality" ? 750 : 900
     },
-    request.optimization_mode === "quality" ? 3000 : 4500
+    request.optimization_mode === "max_quality" ? 11000 : request.optimization_mode === "quality" ? 3000 : 4500
   );
 
   const optimizedPrompt = extractOutputText(data).trim();

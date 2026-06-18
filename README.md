@@ -37,9 +37,9 @@ For local UI work without an OpenAI key, set `SHAKESPEARE_MOCK_MODEL=true` in th
 - Global rewrite hotkey with Speed/Quality modes.
 - Editable hotkey, preview hotkey, and backend URL.
 - Focused-field rewrite fallback: click inside an editable field and press the rewrite hotkey when no text is selected.
+- One rewrite hotkey that auto-detects the surface: rewrites a selection/focused field when present, and otherwise (terminals/TUIs like Claude Code) screenshots and OCRs the screen, rewrites the draft using the visible terminal context, and pastes it back.
 - Optional preview-before-replace flow with accept, regenerate, and cancel.
 - Custom prompt modes with local saved instructions.
-- Local team policy import for shared modes and admin-locked privacy controls.
 - Privacy controls for clipboard context, screen context, local history, and clipboard restoration.
 - App/window denylist to prevent context capture in sensitive surfaces.
 - Context receipt showing model, latency, context sources, and warnings.
@@ -49,6 +49,21 @@ For local UI work without an OpenAI key, set `SHAKESPEARE_MOCK_MODEL=true` in th
 - zsh input-buffer integration for rewriting the current terminal prompt in place.
 - VS Code/Cursor extension bridge for active file, selected code, visible code, diagnostics, and git diff context.
 - Latency-optimized Speed router with deterministic local classification, compact model packets, pattern-specific fallbacks, and route metadata.
+
+## Rewriting in terminals and TUIs (Claude Code)
+
+There is a single rewrite hotkey. It decides what to do based on what it can capture:
+
+- If you have text selected (or a focused field it can read), it rewrites that in place — the normal flow.
+- If it cannot capture any text — which is the case in terminals and full-screen TUIs like the Claude Code CLI, where there is no selectable or accessible field — it falls back to rewriting from a screenshot.
+
+To use the screenshot fallback:
+
+1. Enable `Screen context` in the Privacy panel (this is the switch that lets the rewrite hotkey screenshot).
+2. Type a rough prompt in your terminal/Claude Code. No selecting or highlighting.
+3. Press the rewrite hotkey (default `Ctrl/Cmd+Shift+P`).
+
+When Screen context is on, the hotkey first grabs a lightweight screen frame (pixels only, no OCR) so a terminal draft is preserved before the capture step touches the clipboard. It then probes for a selection. If you have a selection, it rewrites that normally and discards the frame — no OCR, fast. Only when there is no selection does it run the slower local OCR and ask the model (max-quality) to find your draft prompt and rewrite it using the visible terminal context (file paths, errors, failing tests, commands), then paste the rewrite back. The rewrite is also left on the clipboard as a fallback. The OCR + higher-effort model path is intentionally slower, but it only runs when there is nothing to select.
 
 ## Browser Context Extension
 
@@ -100,31 +115,6 @@ The extension sends bounded editor context to the local desktop app only:
 
 The desktop app ignores this data unless `IDE context` is enabled.
 
-## Team Policy
-
-The dashboard can import a local team policy JSON file shape. This is the no-Supabase path for shared modes and admin privacy controls:
-
-```json
-{
-  "teamName": "Platform Team",
-  "sharedModes": [
-    {
-      "id": "review",
-      "name": "Review",
-      "instructions": "Rewrite as a bug-focused code review prompt."
-    }
-  ],
-  "privacyControls": {
-    "focusedFieldRewriteEnabled": { "value": true, "locked": false },
-    "screenContextEnabled": { "value": false, "locked": true },
-    "localHistoryEnabled": { "value": false, "locked": true }
-  },
-  "appDenylist": ["1Password"],
-  "lockAppDenylist": false
-}
-```
-
-Locked privacy controls override local settings. Shared modes appear alongside local custom modes.
 
 ## Terminal / zsh Integration
 
