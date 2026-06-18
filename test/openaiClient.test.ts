@@ -32,7 +32,7 @@ test("speed mode returns router fallback with metadata when no OpenAI key is con
     assert.match(result.optimized_prompt, /inspect the existing product flow and nearby code/i);
     assert.match(result.optimized_prompt, /acceptance criteria/i);
     assert.match(result.optimized_prompt, /verify with the closest tests\/checks/i);
-    assert(result.context_char_count != null && result.context_char_count > 0);
+    assert.equal(result.context_char_count, 0);
   } finally {
     restoreEnv("OPENAI_API_KEY", originalKey);
     restoreEnv("SHAKESPEARE_MOCK_MODEL", originalMock);
@@ -129,6 +129,57 @@ test("speed mode rejects long unstructured model output before paste", async () 
     assert.match(result.optimized_prompt, /Give quick design feedback/i);
     assert.match(result.optimized_prompt, /\n\nPlease cover:\n- Whether/i);
     assert.match(result.optimized_prompt, /Visible context:\nDesign chat/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv("OPENAI_API_KEY", originalKey);
+    restoreEnv("SHAKESPEARE_MOCK_MODEL", originalMock);
+    restoreEnv("SHAKESPEARE_FAST_ROUTER", originalRouter);
+  }
+});
+
+test("speed mode rejects model output that leaks raw observed context labels", async () => {
+  const originalKey = process.env.OPENAI_API_KEY;
+  const originalMock = process.env.SHAKESPEARE_MOCK_MODEL;
+  const originalRouter = process.env.SHAKESPEARE_FAST_ROUTER;
+  const originalFetch = globalThis.fetch;
+
+  process.env.OPENAI_API_KEY = "test-key";
+  process.env.SHAKESPEARE_MOCK_MODEL = "false";
+  process.env.SHAKESPEARE_FAST_ROUTER = "true";
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        output_text:
+          "Work in the current repo on this request: I did the entire code base for potential opportunities to become more efficient.\n\nUse observed context where relevant: Selection: I did the entire code base for potential opportunities to become more efficient.; App: Codex; Window: Codex; Target: Codex"
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+
+  try {
+    const roughPrompt = "I did the entire code base for potential opportunities to become more efficient.";
+    const result = await compileWithModel({
+      rough_prompt: roughPrompt,
+      mode: "coding_agent",
+      optimization_mode: "speed",
+      context: {
+        active_app: "Codex",
+        window_title: "Codex",
+        detected_target: "Codex",
+        selected_text: roughPrompt
+      }
+    });
+
+    assert.equal(result.used_fallback, true);
+    assert.equal(result.route_archetype, "coding_implementation");
+    assert.equal(result.route_pattern, "codebase_audit");
+    assert.match(result.optimized_prompt, /\bAudit\b/i);
+    assert.match(result.optimized_prompt, /Prioritized findings ranked by impact and effort/i);
+    assert.doesNotMatch(result.optimized_prompt, /\b(?:Selection|App|Window|Target):/i);
+    assert.doesNotMatch(result.optimized_prompt, /\bI did the entire code base\b/i);
+    assert.doesNotMatch(result.optimized_prompt, /Work in the current repo on this request/i);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv("OPENAI_API_KEY", originalKey);

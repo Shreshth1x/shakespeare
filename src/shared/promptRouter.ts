@@ -65,6 +65,10 @@ const DEBUGGING_RE =
 const CODING_RE =
   /\b(fix|implement|refactor|test|build|ship|pr|repo|code|component|route|api|database|schema|migration|frontend|backend|renderer|electron|typescript|javascript)\b/i;
 const CODING_ACTION_RE = /\b(fix|implement|refactor|test|build|ship|add|update|wire|integrate)\b/i;
+const CODEBASE_AUDIT_RE =
+  /\b(audit|review|scan|inspect|analy[sz]e|evaluate|look through|go through)\b[\s\S]{0,100}\b(entire|whole|full|all|the)\b[\s\S]{0,80}\b(code ?base|repo|repository|project|app)\b[\s\S]{0,140}\b(efficien\w*|performance|latency|optim\w*|opportunit\w*|improv\w*|faster|speed)\b/i;
+const CODEBASE_AUDIT_VOICE_RE =
+  /\bi did\b[\s\S]{0,100}\b(entire|whole|full|all|the)\b[\s\S]{0,80}\b(code ?base|repo|repository|project|app)\b[\s\S]{0,140}\b(efficien\w*|performance|latency|optim\w*|opportunit\w*|improv\w*|faster|speed)\b/i;
 const UI_SURFACE_RE = /\b(ui|ux|interface|screens?|dashboard|electron app|frontend|renderer|settings|onboarding|component|layout|design system)\b/i;
 const UI_DESIGN_ACTION_RE =
   /\b(redesign|redeseign|restyle|polish|visual design|typography|colors?|palette|spacing|clean|cleaner|look like|look .*style|improve|benchmark|reference|inspiration|whisper flow|wispr flow|willow)\b/i;
@@ -104,6 +108,8 @@ const TONE_RE = /\b(tone|warm|concise|friendly|direct|professional|casual|audien
 const DEICTIC_RE = /\b(this|it|that|these|those|here)\b/i;
 const CONTRACT_LABEL_RE =
   /(?:^|\n|\s)(?:Evidence|Critique|Judgment|Action|Discovery|Acceptance|Implementation|Verification|Output|Boundary|Schema|Fidelity|Audience|Decision|Tradeoff|Recommendation|Source|Extraction|Deliverable|Scope|Synthesis|Caveat|Level|Practice|Misconception|Positioning|Claims|Variant|Targeting|Fabrication|Generation|Constraint|Selection|Freshness|Visual|Coherence|Intent|Tone|Situation|Plan|Risk|Missing-slot)\s+contract:/i;
+const INTERNAL_SCAFFOLD_RE =
+  /\bWork in the current repo on this request:|\bUse observed context where relevant:\s*(?:Selection|App|Window|Target):/i;
 
 export function buildRoutedPrompt(request: CompilePromptRequest): RoutedPrompt {
   const startedAt = Date.now();
@@ -271,6 +277,14 @@ export function buildRouterFallback(request: CompilePromptRequest, decision: Rou
         "Inspect the existing product flow and nearby code before editing. Define the smallest useful implementation slice and acceptance criteria, make only the scoped change, verify with the closest tests/checks, and summarize changed files plus evidence.",
         safetyLine
       ]);
+    case "codebase_audit":
+      return joinLines([
+        normalizeCodebaseAuditPrompt(request.rough_prompt),
+        "Scope:\n- Inspect the current repo structure, main runtime paths, dependencies, repeated work, IO/network calls, build costs, and user-visible latency.\n- Look for efficiency opportunities that can be backed by code evidence, tests, logs, benchmarks, or bundle/runtime measurements.",
+        "Output:\n- Prioritized findings ranked by impact and effort.\n- File/function references for each finding.\n- Quick wins vs larger refactors.\n- Recommended verification for each opportunity.",
+        "Do not edit files yet unless I explicitly ask for implementation.",
+        safetyLine
+      ]);
     case "debug_root_cause":
       return joinLines([
         `Investigate the observed failure: ${request.rough_prompt}`,
@@ -372,9 +386,6 @@ export function buildCompactObservedContext(
 
   const speed = optimizationMode === "speed";
   const pieces: ContextPiece[] = pattern === "visual_feedback" ? visualFeedbackContextPieces(context, speed, roughPrompt) : [
-    piece("active_app", "App", context.active_app, 160),
-    piece("window_title", "Window", context.window_title, 220),
-    piece("detected_target", "Target", context.detected_target, 120),
     piece("browser_hostname", "Host", context.browser_hostname, 180),
     piece("browser_url", "URL", context.browser_url, 240),
     piece("browser_title", "Page", context.browser_title, 220),
@@ -396,7 +407,7 @@ export function buildCompactObservedContext(
   const selected = context.selected_text?.trim();
   if (selected) {
     const selectedPiece = piece("selected_text", "Selection", selected, Math.min(500, selected.length));
-    if (selectedPiece && pattern !== "visual_feedback") {
+    if (selectedPiece && pattern !== "visual_feedback" && normalizeForComparison(selected) !== normalizeForComparison(roughPrompt)) {
       pieces.unshift(selectedPiece);
     }
   }
@@ -453,6 +464,7 @@ export function isUsableRouterModelOutput(value: string): boolean {
   if (/^```/.test(trimmed)) return false;
   if (/^\{[\s\S]*"optimized_prompt"/.test(trimmed)) return false;
   if (CONTRACT_LABEL_RE.test(trimmed)) return false;
+  if (INTERNAL_SCAFFOLD_RE.test(trimmed)) return false;
   if (isLongSingleParagraph(trimmed)) return false;
   return true;
 }
@@ -471,6 +483,7 @@ function selectArchetypeRoute(request: CompilePromptRequest, target: RouterTarge
   if (isVisualFeedbackRequest(roughPrompt, text)) return route("visual_design_feedback");
   if (isUiRedesignRequest(text)) return route("ui_redesign_reference");
   if (hasExplicitToolIntent(text)) return route("tool_reference_workflow");
+  if (isCodebaseAuditRequest(roughPrompt, text)) return route("coding_implementation", "codebase_audit");
   if (
     isDebuggingIntent(text) &&
     !(codingTarget && /^fix\b/i.test(request.rough_prompt) && !/\b(failing|failed|root cause|debug|investigate|crash|broken|timeout)\b/i.test(text))
@@ -514,7 +527,7 @@ function route(archetype: RouterArchetype, patternOverride?: RouterPattern): Arc
     case "decision_support":
       return { archetype, mode: "decision_advice", pattern: "decision_matrix" };
     case "coding_implementation":
-      return { archetype, mode: "coding_agent", pattern: "agent_fix" };
+      return { archetype, mode: "coding_agent", pattern: patternOverride ?? "agent_fix" };
     case "debugging":
       return { archetype, mode: "debugging", pattern: "debug_root_cause" };
     case "extraction_transformation":
@@ -552,6 +565,7 @@ function selectValuePrimitive(
   }
   if (routeChoice.archetype === "visual_design_feedback") return "visual_feedback_contract";
   if (routeChoice.archetype === "tool_reference_workflow") return "tool_binding";
+  if (routeChoice.pattern === "codebase_audit") return "deliverable_contract";
   if (isVolatileFactRequest(text) && routeChoice.archetype === "research_info") return "evidence_contract";
 
   switch (routeChoice.archetype) {
@@ -601,6 +615,7 @@ function detectFailureMode(
   if (primitive === "evidence_contract" && isVolatileFactRequest(text)) return "hallucination_risk";
   if (primitive === "evidence_contract") return "missing_evidence";
   if (primitive === "visual_feedback_contract") return hasContext ? "missing_visual_verification" : "missing_visual_context";
+  if (routeChoice.pattern === "codebase_audit") return "needs_decomposition";
   if (DEICTIC_RE.test(rough) && hasContext) return "missing_context";
   if (primitive === "schema_contract" || ((routeChoice.mode === "extraction" || EXTRACTION_RE.test(text)) && !FORMAT_RE.test(text))) return "parseability";
   if (primitive === "audience_tone_contract") return TONE_RE.test(text) ? "wrong_output_shape" : "tone_mismatch";
@@ -712,6 +727,7 @@ function outputBudgetFor(mode: OptimizationMode, pattern: RouterPattern, primiti
       pattern === "research_compare" ||
       pattern === "decision_matrix" ||
       pattern === "ui_redesign" ||
+      pattern === "codebase_audit" ||
       pattern === "tool_workflow" ||
       primitive === "safety_uncertainty_contract"
     ) {
@@ -825,6 +841,13 @@ function buildContractSlots(request: CompilePromptRequest, decision: RouterDecis
         "Implementation contract: make the scoped change without unrelated refactors or behavior drift.",
         "Verification contract: verify with the closest tests/checks or explain why not, then summarize changed files and evidence."
       ];
+    case "codebase_audit":
+      return [
+        "Audit the codebase for efficiency opportunities; this is an investigation/report task, not an implementation task.",
+        "Inspect architecture, hot paths, repeated work, IO/network calls, dependency/build costs, and user-visible latency.",
+        "Rank findings by impact and effort with file/function references and supporting evidence.",
+        "Recommend verification for each opportunity and do not edit files unless explicitly asked."
+      ];
     case "debug_root_cause":
       return [
         "Evidence contract: treat logs, stack traces, screenshots, and visible context as the starting evidence.",
@@ -931,6 +954,17 @@ function isVisualFeedbackRequest(roughPrompt: string, text: string): boolean {
   if (VISUAL_FEEDBACK_RE.test(roughPrompt)) return true;
   if (!VISUAL_FEEDBACK_RE.test(text)) return false;
   return VISUAL_CONTEXT_RE.test(text);
+}
+
+function isCodebaseAuditRequest(roughPrompt: string, text: string): boolean {
+  return CODEBASE_AUDIT_RE.test(text) || CODEBASE_AUDIT_VOICE_RE.test(roughPrompt);
+}
+
+function normalizeCodebaseAuditPrompt(roughPrompt: string): string {
+  if (CODEBASE_AUDIT_VOICE_RE.test(roughPrompt) && !/\baudit\b/i.test(roughPrompt)) {
+    return "Audit the entire codebase for opportunities to make it more efficient.";
+  }
+  return `Audit the codebase for efficiency opportunities: ${roughPrompt}`;
 }
 
 function buildStyleReferenceLine(roughPrompt: string): string | null {

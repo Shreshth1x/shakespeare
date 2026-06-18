@@ -17,6 +17,7 @@ interface RouterFixture {
   expectedPattern: RouterPattern;
   expectedPrimitive: RouterValuePrimitive;
   contractSignals: RegExp[];
+  forbiddenFallbackSignals?: RegExp[];
 }
 
 interface Failure {
@@ -25,6 +26,7 @@ interface Failure {
   actualPattern: RouterPattern;
   actualPrimitive: RouterValuePrimitive;
   missingSignals: string[];
+  forbiddenSignals: string[];
   contractSlotCount: number;
   fallback: string;
 }
@@ -57,12 +59,15 @@ for (const fixture of fixtures) {
   const missingSignals = fixture.contractSignals
     .filter((signal) => !signal.test(routed.fallback))
     .map((signal) => signal.toString());
+  const forbiddenSignals = (fixture.forbiddenFallbackSignals ?? [])
+    .filter((signal) => signal.test(routed.fallback))
+    .map((signal) => signal.toString());
 
   const actual = {
     archetype: routed.decision.archetype,
     pattern: routed.decision.pattern,
     primitive: routed.decision.valuePrimitive,
-    contract: missingSignals.length === 0
+    contract: missingSignals.length === 0 && forbiddenSignals.length === 0
   };
   const bucket = byCategory.get(fixture.category) ?? { total: 0, archetype: 0, pattern: 0, primitive: 0, contract: 0 };
   bucket.total += 1;
@@ -77,6 +82,7 @@ for (const fixture of fixtures) {
     actual.pattern !== fixture.expectedPattern ||
     actual.primitive !== fixture.expectedPrimitive ||
     missingSignals.length ||
+    forbiddenSignals.length ||
     routed.packet.contract.length < 4
   ) {
     failures.push({
@@ -85,6 +91,7 @@ for (const fixture of fixtures) {
       actualPattern: actual.pattern,
       actualPrimitive: actual.primitive,
       missingSignals,
+      forbiddenSignals,
       contractSlotCount: routed.packet.contract.length,
       fallback: routed.fallback
     });
@@ -95,7 +102,7 @@ const total = fixtures.length;
 const archetypePass = total - failures.filter((failure) => failure.actualArchetype !== failure.fixture.expectedArchetype).length;
 const patternPass = total - failures.filter((failure) => failure.actualPattern !== failure.fixture.expectedPattern).length;
 const primitivePass = total - failures.filter((failure) => failure.actualPrimitive !== failure.fixture.expectedPrimitive).length;
-const contractPass = total - failures.filter((failure) => failure.missingSignals.length > 0).length;
+const contractPass = total - failures.filter((failure) => failure.missingSignals.length > 0 || failure.forbiddenSignals.length > 0).length;
 
 console.log(`Router eval fixtures: ${total} across ${byCategory.size} archetypes`);
 console.log(`Archetype accuracy: ${pct(archetypePass, total)}`);
@@ -130,6 +137,9 @@ if (failures.length) {
     );
     if (failure.missingSignals.length) {
       console.error(`  missing contract signals: ${failure.missingSignals.join(", ")}`);
+    }
+    if (failure.forbiddenSignals.length) {
+      console.error(`  forbidden fallback signals: ${failure.forbiddenSignals.join(", ")}`);
     }
     if (failure.contractSlotCount < 4) {
       console.error(`  contract slots too shallow: ${failure.contractSlotCount}`);
@@ -270,6 +280,41 @@ function buildFixtures(): RouterFixture[] {
       "build the hotkey recorder component",
       "fix the renderer layout overflow"
     ], (_prompt, index) => (index % 2 === 0 ? { active_app: "Codex", window_title: "repo" } : { ide_editor: "Cursor", ide_workspace: "app" })),
+    {
+      category: "coding_implementation",
+      roughPrompt: "I did the entire code base for potential opportunities to become more efficient.",
+      context: {
+        active_app: "Codex",
+        window_title: "Codex",
+        detected_target: "Codex",
+        selected_text: "I did the entire code base for potential opportunities to become more efficient."
+      },
+      expectedArchetype: "coding_implementation",
+      expectedPattern: "codebase_audit",
+      expectedPrimitive: "deliverable_contract",
+      contractSignals: [/Audit/i, /codebase|code ?base/i, /efficien|performance|latency/i, /Prioritized findings|impact and effort/i, /Do not edit/i],
+      forbiddenFallbackSignals: [
+        /\bSelection:/i,
+        /\bApp:/i,
+        /\bWindow:/i,
+        /\bTarget:/i,
+        /\bI did the entire code base\b/i,
+        /Work in the current repo on this request/i
+      ]
+    },
+    ...fixture(
+      "coding_implementation",
+      "coding_implementation",
+      "codebase_audit",
+      "deliverable_contract",
+      [/Audit/i, /runtime paths|dependencies|repeated work|user-visible latency/i, /Prioritized findings|impact and effort/i, /Recommended verification/i],
+      [
+        "audit the entire codebase for efficiency opportunities",
+        "review the whole repo for performance improvements",
+        "scan the full app for latency optimization opportunities"
+      ],
+      { active_app: "Codex", window_title: "repo" }
+    ),
     ...fixture("debugging", "debugging", "debug_root_cause", "reproduction_contract", [/observed failure|failure/i, /evidence/i, /root cause/i, /exact failure|closest check/i], [
       "why is this failing",
       "debug this exception",

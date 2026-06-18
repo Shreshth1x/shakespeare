@@ -68,6 +68,7 @@ export type RouterPattern =
   | "write_edit"
   | "practical_plan"
   | "agent_fix"
+  | "codebase_audit"
   | "ui_redesign"
   | "debug_root_cause"
   | "research_compare"

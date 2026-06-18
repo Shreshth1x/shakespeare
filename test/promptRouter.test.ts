@@ -194,6 +194,59 @@ test("router asks for visual context when visual feedback has no usable screen t
   assert.doesNotMatch(routed.fallback, /Implement in the current repo/i);
 });
 
+test("router turns codebase efficiency audit dictation into a clean audit prompt", () => {
+  const roughPrompt = "I did the entire code base for potential opportunities to become more efficient.";
+  const routed = buildRoutedPrompt({
+    rough_prompt: roughPrompt,
+    mode: "coding_agent",
+    optimization_mode: "speed",
+    context: {
+      selected_text: roughPrompt,
+      active_app: "Codex",
+      window_title: "Codex",
+      detected_target: "Codex"
+    }
+  });
+
+  assert.equal(routed.decision.target, "codex");
+  assert.equal(routed.decision.mode, "coding_agent");
+  assert.equal(routed.decision.pattern, "codebase_audit");
+  assert.equal(routed.decision.archetype, "coding_implementation");
+  assert.equal(routed.decision.valuePrimitive, "deliverable_contract");
+  assert.equal(routed.decision.failureMode, "needs_decomposition");
+  assert.equal(routed.contextSourceCount, 0);
+  assert.match(routed.fallback, /Audit the entire codebase for opportunities to make it more efficient/i);
+  assert.match(routed.fallback, /Prioritized findings ranked by impact and effort/i);
+  assert.match(routed.fallback, /File\/function references/i);
+  assert.match(routed.fallback, /Do not edit files yet/i);
+  assert.doesNotMatch(routed.fallback, /Work in the current repo on this request/i);
+  assert.doesNotMatch(routed.fallback, /Use observed context where relevant/i);
+  assert.doesNotMatch(routed.fallback, /Selection:/i);
+  assert.doesNotMatch(routed.fallback, /App: Codex|Window: Codex|Target: Codex/i);
+});
+
+test("router keeps routing metadata internal for normal selected coding prompts", () => {
+  const roughPrompt = "fix this auth bug";
+  const routed = buildRoutedPrompt({
+    rough_prompt: roughPrompt,
+    mode: "coding_agent",
+    optimization_mode: "speed",
+    context: {
+      selected_text: roughPrompt,
+      active_app: "Codex",
+      window_title: "Codex",
+      detected_target: "Codex"
+    }
+  });
+
+  assert.equal(routed.decision.target, "codex");
+  assert.equal(routed.decision.pattern, "agent_fix");
+  assert.match(routed.fallback, /Work in the current repo/i);
+  assert.doesNotMatch(routed.fallback, /Use observed context where relevant/i);
+  assert.doesNotMatch(routed.fallback, /Selection:/i);
+  assert.doesNotMatch(routed.fallback, /App: Codex|Window: Codex|Target: Codex/i);
+});
+
 test("router rejects long single-paragraph model output so pasted prompts stay scannable", () => {
   const slop =
     "Please review the visible design and explain whether it looks cool while using the screen context as evidence and covering the strongest part, weakest part, color, typography, hierarchy, polish, brand fit, and the top two or three improvements without inventing details or treating it as an implementation task.";
