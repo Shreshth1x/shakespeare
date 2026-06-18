@@ -5,6 +5,7 @@ import {
   buildRoutedPrompt,
   buildRouterFallback,
   buildRouterPacket,
+  isUsableRouterModelOutput,
   routePrompt
 } from "../src/shared/promptRouter";
 import type { CompilePromptRequest, RouterArchetype, RouterDecision, RouterValuePrimitive } from "../src/shared/types";
@@ -159,12 +160,47 @@ test("router uses screen context and visual phrasing for design feedback instead
   assert.equal(routed.decision.valuePrimitive, "visual_feedback_contract");
   assert.equal(routed.decision.failureMode, "missing_visual_verification");
   assert(routed.contextUsed.includes("visible_text"));
-  assert.match(routed.fallback, /Review the visible design/i);
-  assert.match(routed.fallback, /composition|hierarchy|typography|color/i);
-  assert.match(routed.fallback, /strongest part/i);
-  assert.match(routed.fallback, /weakest part/i);
+  assert(routed.packet.context?.startsWith("Visible screen context: Design chat"));
+  assert.match(routed.fallback, /Give quick design feedback/i);
+  assert.match(routed.fallback, /Focus: does this look cool\?/i);
+  assert.match(routed.fallback, /Visible context:\nDesign chat: cool logo/i);
+  assert.match(routed.fallback, /blue wordmark/i);
+  assert.match(routed.fallback, /rounded icon/i);
+  assert.match(routed.fallback, /typography options/i);
+  assert.match(routed.fallback, /cool and polished/i);
+  assert.match(routed.fallback, /top 2-3 improvements/i);
+  assert(routed.fallback.length < 620);
+  assert.match(routed.fallback, /\n\nPlease cover:\n- Whether/i);
+  assert.doesNotMatch(routed.fallback, /Answer the user's/i);
+  assert.doesNotMatch(routed.fallback, /Use this visible screen context as evidence/i);
   assert.doesNotMatch(routed.fallback, /Implement in the current repo/i);
+  assert.doesNotMatch(routed.fallback, /App: Codex|Window: Codex|Target: Codex/i);
+  assert.doesNotMatch(routed.fallback, /Selection: does this look cool/i);
   assert.doesNotMatch(routed.fallback, /\bDiscovery contract\b|\bAcceptance contract\b|\bImplementation contract\b/);
+});
+
+test("router asks for visual context when visual feedback has no usable screen text", () => {
+  const routed = buildRoutedPrompt({
+    rough_prompt: "does this look cool?",
+    mode: "coding_agent",
+    optimization_mode: "speed"
+  });
+
+  assert.equal(routed.decision.mode, "visual_feedback");
+  assert.equal(routed.decision.pattern, "visual_feedback");
+  assert.equal(routed.decision.failureMode, "missing_visual_context");
+  assert.match(routed.fallback, /ask for a screenshot or clearer visual context/i);
+  assert.doesNotMatch(routed.fallback, /Use the visible context:/i);
+  assert.doesNotMatch(routed.fallback, /Implement in the current repo/i);
+});
+
+test("router rejects long single-paragraph model output so pasted prompts stay scannable", () => {
+  const slop =
+    "Please review the visible design and explain whether it looks cool while using the screen context as evidence and covering the strongest part, weakest part, color, typography, hierarchy, polish, brand fit, and the top two or three improvements without inventing details or treating it as an implementation task.";
+
+  assert.equal(isUsableRouterModelOutput(slop), true);
+  assert.equal(isUsableRouterModelOutput(`${slop} ${slop}`), false);
+  assert.equal(isUsableRouterModelOutput(`${slop}\n\n- Strongest part\n- Weakest part`), true);
 });
 
 test("router lets Gmail and Slack override the default coding mode", () => {

@@ -13,11 +13,12 @@ import type {
 
 export const SPEED_COMPILER_INSTRUCTIONS = [
   "You are Shakespeare, a latency-critical prompt compiler.",
-  "Rewrite the rough request into the smallest work contract likely to prevent the next wasted turn.",
+  "Rewrite the rough request into the smallest useful prompt likely to prevent the next wasted turn.",
   "Preserve intent. Do not add unsupported facts, filenames, sources, errors, credentials, preferences, or constraints.",
   "Use observed context only when clearly relevant. Treat context as observed, not guaranteed.",
-  "Apply the packet's archetype and value primitive. Add that missing contract only: tool/source binding, evidence, schema, audience/tone, decision criteria, acceptance, reproduction, learning loop, visual verification, or uncertainty.",
-  "Write the result as a normal user prompt. Do not expose labels like Discovery contract, Acceptance contract, or Evidence contract.",
+  "Use the packet's archetype, value primitive, and hint list internally. Add only the missing clarification: tool/source binding, evidence, schema, audience/tone, decision criteria, acceptance, reproduction, learning loop, visual verification, or uncertainty.",
+  "Write the result as a normal user prompt. Do not mention routing, packets, internal hints, or any '<label> contract:' phrasing.",
+  "Use short paragraphs or bullets when the prompt includes context, constraints, checks, or multiple asks, so the user can scan it before pressing Enter.",
   "Speed rules: concise, artifact-ready, no preamble, no explanation, no markdown fence.",
   "Return only the rewritten prompt."
 ].join("\n");
@@ -101,11 +102,19 @@ const CREATIVE_RE = /\b(brainstorm|tagline|names?|ideas?|concepts?|story|premise
 const MULTI_STEP_RE = /\b(and then|also|after that|first|second|third|multiple|steps?|plan)\b/i;
 const TONE_RE = /\b(tone|warm|concise|friendly|direct|professional|casual|audience|voice)\b/i;
 const DEICTIC_RE = /\b(this|it|that|these|those|here)\b/i;
+const CONTRACT_LABEL_RE =
+  /(?:^|\n|\s)(?:Evidence|Critique|Judgment|Action|Discovery|Acceptance|Implementation|Verification|Output|Boundary|Schema|Fidelity|Audience|Decision|Tradeoff|Recommendation|Source|Extraction|Deliverable|Scope|Synthesis|Caveat|Level|Practice|Misconception|Positioning|Claims|Variant|Targeting|Fabrication|Generation|Constraint|Selection|Freshness|Visual|Coherence|Intent|Tone|Situation|Plan|Risk|Missing-slot)\s+contract:/i;
 
 export function buildRoutedPrompt(request: CompilePromptRequest): RoutedPrompt {
   const startedAt = Date.now();
   const decision = routePrompt(request);
-  const context = buildCompactObservedContext(request.context, decision.contextBudgetChars, request.optimization_mode);
+  const context = buildCompactObservedContext(
+    request.context,
+    decision.contextBudgetChars,
+    request.optimization_mode,
+    decision.pattern,
+    request.rough_prompt
+  );
   const packet = buildRouterPacket(request, decision, context.text);
   const fallback = buildRouterFallback(request, decision, context.text);
 
@@ -201,23 +210,26 @@ export function buildRouterFallback(request: CompilePromptRequest, decision: Rou
       `Task: ${request.rough_prompt}`,
       compactContext ? `Observed context: ${compactContext}` : null,
       `Use the "${request.custom_mode.name}" mode: ${request.custom_mode.instructions}`,
-      "Preserve intent, avoid unsupported facts, apply only the missing work contract, and return only the rewritten prompt."
+      "Preserve intent, avoid unsupported facts, add only the missing clarification, and return only the rewritten prompt."
     ]);
   }
 
   const safetyLine = safetyContractLine(decision.valuePrimitive);
 
   switch (decision.pattern) {
-    case "visual_feedback":
+    case "visual_feedback": {
+      const visibleContext = cleanVisualContextForPrompt(compactContext);
       return joinLines([
-        `Review the visible design or visual artifact: ${request.rough_prompt}`,
-        compactContext ? `Use the observed screen/context as evidence: ${compactContext}` : null,
-        "Give concise design feedback instead of treating this as an implementation task.",
-        "Assess the visible artifact on composition, hierarchy, typography, color, polish, clarity, and brand fit.",
-        "Say whether it works overall, name the strongest part, name the weakest part, and give 2-3 concrete improvements.",
-        "Do not invent unseen details; if the visual context is missing or insufficient, ask for a screenshot or describe what evidence is needed.",
+        "Give quick design feedback on the visible logo/design.",
+        `Focus: ${truncate(request.rough_prompt.trim(), 160)}`,
+        visibleContext
+          ? `Visible context:\n${trimTerminalPunctuation(visibleContext)}.`
+          : "If you cannot see enough visual context, ask for a screenshot or clearer visual context.",
+        "Please cover:\n- Whether it feels cool and polished overall.\n- What works best / feels strongest.\n- What feels weakest.\n- The top 2-3 improvements.",
+        "Do not treat this as an implementation task or invent details you cannot see.",
         safetyLine
       ]);
+    }
     case "ui_redesign":
       return joinLines([
         `Redesign the current app UI based on the request: ${request.rough_prompt}`,
@@ -350,14 +362,16 @@ export function buildRouterFallback(request: CompilePromptRequest, decision: Rou
 export function buildCompactObservedContext(
   context: PromptContext | undefined,
   budgetChars: number,
-  optimizationMode: OptimizationMode
+  optimizationMode: OptimizationMode,
+  pattern?: RouterPattern,
+  roughPrompt = ""
 ): { text: string; sources: string[] } {
   if (!context || budgetChars <= 0) {
     return { text: "", sources: [] };
   }
 
   const speed = optimizationMode === "speed";
-  const pieces: ContextPiece[] = [
+  const pieces: ContextPiece[] = pattern === "visual_feedback" ? visualFeedbackContextPieces(context, speed, roughPrompt) : [
     piece("active_app", "App", context.active_app, 160),
     piece("window_title", "Window", context.window_title, 220),
     piece("detected_target", "Target", context.detected_target, 120),
@@ -382,7 +396,7 @@ export function buildCompactObservedContext(
   const selected = context.selected_text?.trim();
   if (selected) {
     const selectedPiece = piece("selected_text", "Selection", selected, Math.min(500, selected.length));
-    if (selectedPiece) {
+    if (selectedPiece && pattern !== "visual_feedback") {
       pieces.unshift(selectedPiece);
     }
   }
@@ -409,11 +423,37 @@ export function buildCompactObservedContext(
   };
 }
 
+function visualFeedbackContextPieces(context: PromptContext, speed: boolean, roughPrompt: string): ContextPiece[] {
+  const normalizedPrompt = normalizeForComparison(roughPrompt);
+  const maybeFocusedText = normalizeForComparison(context.browser_focused_text) === normalizedPrompt ? null : context.browser_focused_text;
+
+  return [
+    piece("visible_text", "Visible screen context", context.visible_text, speed ? 900 : 2400),
+    piece("browser_visible_text", "Browser page context", context.browser_visible_text, speed ? 900 : 2400),
+    piece("browser_selection", "Browser selection", context.browser_selection, speed ? 500 : 1400),
+    piece("browser_focused_text", "Focused browser text", maybeFocusedText, speed ? 500 : 1200)
+  ].filter((candidate): candidate is ContextPiece => Boolean(candidate));
+}
+
+function cleanVisualContextForPrompt(compactContext: string): string {
+  return compactContext
+    .replace(/\b(?:Visible screen context|Browser page context|Browser selection|Focused browser text):\s*/gi, "")
+    .replace(/\s*;\s*/g, "; ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function trimTerminalPunctuation(value: string): string {
+  return value.replace(/[.!?]+$/g, "").trim();
+}
+
 export function isUsableRouterModelOutput(value: string): boolean {
   const trimmed = value.trim();
   if (trimmed.length < 12) return false;
   if (/^```/.test(trimmed)) return false;
   if (/^\{[\s\S]*"optimized_prompt"/.test(trimmed)) return false;
+  if (CONTRACT_LABEL_RE.test(trimmed)) return false;
+  if (isLongSingleParagraph(trimmed)) return false;
   return true;
 }
 
@@ -701,13 +741,22 @@ function piece(key: keyof PromptContext, label: string, value: string | null | u
 }
 
 function joinLines(parts: Array<string | null>): string {
-  return parts.filter(Boolean).join(" ");
+  return parts.filter((part): part is string => Boolean(part)).map((part) => part.trim()).join("\n\n");
+}
+
+function isLongSingleParagraph(value: string): boolean {
+  if (value.length <= 320) return false;
+  return !/\n\s*\S/.test(value);
 }
 
 function truncate(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   if (maxLength <= 3) return value.slice(0, maxLength);
   return `${value.slice(0, maxLength - 3)}...`;
+}
+
+function normalizeForComparison(value: string | null | undefined): string {
+  return (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function buildReferenceWorkflowLine(roughPrompt: string): string {
@@ -834,10 +883,10 @@ function buildContractSlots(request: CompilePromptRequest, decision: RouterDecis
       ];
     case "visual_feedback":
       return [
-        "Evidence contract: use visible screen/context as evidence for the critique and do not invent unseen visual details.",
-        "Critique contract: evaluate composition, hierarchy, typography, color, polish, clarity, and brand fit.",
-        "Judgment contract: answer whether it works overall, then name the strongest and weakest parts.",
-        "Action contract: give 2-3 concrete improvements and ask for a screenshot if visual context is insufficient."
+        "Use visible screen/context as evidence for the critique and do not invent unseen visual details.",
+        "Evaluate composition, hierarchy, typography, color, polish, clarity, and brand fit.",
+        "Answer whether it works overall, then name the strongest and weakest parts.",
+        "Give 2-3 concrete improvements and ask for a screenshot if visual context is insufficient."
       ];
     case "reply_draft":
       return [

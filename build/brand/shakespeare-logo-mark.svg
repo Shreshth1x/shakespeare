@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Shakespeare logo mark</title>
+  <desc id="desc">An abstract S built from prompt brackets, quote marks, and a small transform spark.</desc>
+  <defs>
+    <linearGradient id="shakespeare-mint" x1="388" y1="488" x2="804" y2="844" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#29c79f"/>
+      <stop offset="1" stop-color="#5267ff"/>
+    </linearGradient>
+    <filter id="shakespeare-lift" x="10%" y="8%" width="80%" height="84%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#13201b" flood-opacity=".12"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shakespeare-lift)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path
+      d="M655 206H425c-108 0-183 72-183 173 0 109 91 169 225 169h89"
+      stroke="#13201b"
+      stroke-width="116"
+    />
+    <path
+      d="M369 818h230c108 0 183-72 183-173 0-109-91-169-225-169h-89"
+      stroke="url(#shakespeare-mint)"
+      stroke-width="116"
+    />
+  </g>
+
+  <path
+    d="M710 236c0-35 28-63 63-63h31v58h-18c-16 0-27 12-27 28v15h45v94h-94V236Zm125 0c0-35 28-63 63-63h31v58h-18c-16 0-27 12-27 28v15h45v94h-94V236Z"
+    fill="#5267ff"
+  />
+  <path
+    d="M315 788c0 35-28 63-63 63h-31v-58h18c16 0 27-12 27-28v-15h-45v-94h94v132Zm-125 0c0 35-28 63-63 63H96v-58h18c16 0 27-12 27-28v-15H96v-94h94v132Z"
+    fill="#5267ff"
+  />
+  <path
+    d="M513 405l22 64 64 22-64 22-22 64-22-64-64-22 64-22 22-64Z"
+    fill="#d59627"
+  />
+</svg>
